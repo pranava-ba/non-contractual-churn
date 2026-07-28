@@ -1,0 +1,55 @@
+Empirical validation of the calibration study on public CBA benchmarks
+
+===== CDNow  (cal=39w, T*=26w) =====
+  N=2357  mean x(cal)=1.04  zero-repeat=59.9%  active in forecast=25.1%  mean x*=0.59
+  MLE  E(lam)=0.052 E(mu)=0.051 | MCMC E(lam)=0.053 E(mu)=0.063
+  --- all ---
+    MCMC   cov50=0.84 cov95=0.98 CRPS=0.383 nMAE=0.840 PIT-KS=0.042
+    MLE    cov50=0.83 cov95=0.97 CRPS=0.384 nMAE=0.829 PIT-KS=0.048
+  --- xcal_pos ---
+    MCMC   cov50=0.77 cov95=0.98 CRPS=0.721 nMAE=0.806 PIT-KS=0.049
+    MLE    cov50=0.76 cov95=0.97 CRPS=0.722 nMAE=0.794 PIT-KS=0.061
+  --- active ---
+    MCMC   cov50=0.39 cov95=0.91 CRPS=1.306 nMAE=0.742 PIT-KS=0.432
+    MLE    cov50=0.37 cov95=0.89 CRPS=1.332 nMAE=0.745 PIT-KS=0.450
+
+===== CDNow  (cal=39w, T*=13w) =====
+  N=2357  mean x(cal)=1.04  zero-repeat=59.9%  active in forecast=17.1%  mean x*=0.31
+  MLE  E(lam)=0.052 E(mu)=0.051 | MCMC E(lam)=0.053 E(mu)=0.063
+  --- all ---
+    MCMC   cov50=0.89 cov95=0.98 CRPS=0.215 nMAE=0.877 PIT-KS=0.026
+    MLE    cov50=0.89 cov95=0.98 CRPS=0.214 nMAE=0.867 PIT-KS=0.026
+  --- xcal_pos ---
+    MCMC   cov50=0.83 cov95=0.98 CRPS=0.414 nMAE=0.852 PIT-KS=0.028
+    MLE    cov50=0.82 cov95=0.98 CRPS=0.413 nMAE=0.841 PIT-KS=0.036
+  --- active ---
+    MCMC   cov50=0.39 cov95=0.89 CRPS=1.055 nMAE=0.778 PIT-KS=0.490
+    MLE    cov50=0.37 cov95=0.90 CRPS=1.068 nMAE=0.779 PIT-KS=0.501
+
+===== Grocery  (cal=52w, T*=26w) =====
+  N=1525  mean x(cal)=3.65  zero-repeat=38.7%  active in forecast=30.8%  mean x*=1.24
+  MLE  E(lam)=0.138 E(mu)=0.068 | MCMC E(lam)=0.140 E(mu)=0.074
+  --- all ---
+    MCMC   cov50=0.87 cov95=0.97 CRPS=0.519 nMAE=0.561 PIT-KS=0.040
+    MLE    cov50=0.87 cov95=0.97 CRPS=0.521 nMAE=0.556 PIT-KS=0.039
+  --- xcal_pos ---
+    MCMC   cov50=0.82 cov95=0.97 CRPS=0.796 nMAE=0.549 PIT-KS=0.053
+    MLE    cov50=0.82 cov95=0.96 CRPS=0.799 nMAE=0.544 PIT-KS=0.047
+  --- active ---
+    MCMC   cov50=0.64 cov95=0.91 CRPS=1.378 nMAE=0.458 PIT-KS=0.193
+    MLE    cov50=0.65 cov95=0.90 CRPS=1.384 nMAE=0.454 PIT-KS=0.202
+
+===== Grocery  (cal=52w, T*=52w) =====
+  N=1525  mean x(cal)=3.65  zero-repeat=38.7%  active in forecast=33.9%  mean x*=2.22
+  MLE  E(lam)=0.138 E(mu)=0.068 | MCMC E(lam)=0.140 E(mu)=0.074
+  --- all ---
+    MCMC   cov50=0.83 cov95=0.97 CRPS=1.011 nMAE=0.611 PIT-KS=0.053
+    MLE    cov50=0.83 cov95=0.97 CRPS=1.011 nMAE=0.612 PIT-KS=0.047
+  --- xcal_pos ---
+    MCMC   cov50=0.76 cov95=0.96 CRPS=1.556 nMAE=0.600 PIT-KS=0.059
+    MLE    cov50=0.77 cov95=0.96 CRPS=1.555 nMAE=0.602 PIT-KS=0.055
+  --- active ---
+    MCMC   cov50=0.59 cov95=0.91 CRPS=2.477 nMAE=0.500 PIT-KS=0.130
+    MLE    cov50=0.59 cov95=0.91 CRPS=2.484 nMAE=0.504 PIT-KS=0.136
+
+[saved] C:\Users\Pranava Baascaran\Desktop\Projects\pareto-nbd-extension\results\empirical_results.csv

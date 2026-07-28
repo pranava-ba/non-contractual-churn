@@ -1,0 +1,8 @@
+[1/6] N=300 T=26 rep=0  (1.3s, 24 rows, 24 total)
+[2/6] N=300 T=26 rep=1  (49.7s, 24 rows, 48 total)
+[3/6] N=800 T=39 rep=0  (5.4s, 24 rows, 72 total)
+[4/6] N=800 T=39 rep=1  (2.9s, 24 rows, 96 total)
+[5/6] N=2000 T=52 rep=0  (42.3s, 24 rows, 120 total)
+[6/6] N=2000 T=52 rep=1  (7.5s, 24 rows, 144 total)
+
+[done] 144 rows -> C:\Users\Pranava Baascaran\Desktop\Projects\pareto-nbd-extension\results\results.csv  (109.1s total)
