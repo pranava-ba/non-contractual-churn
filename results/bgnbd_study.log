@@ -1,0 +1,16 @@
+Loading...
+[Simulated] 10 seeds done (11s)
+[CDNow] 10 seeds done (17s)
+[Grocery] 10 seeds done (11s)
+[OnlineRetailII] 10 seeds done (29s)
+[Dunnhumby] 10 seeds done (16s)
+
+=== Structural models: Pareto/NBD vs BG/NBD (mean over seeds, all customers) ===
+dataset           CRPS PN   CRPS BG sig |   PIT-KS PN  PIT-KS BG sig
+Simulated           0.423     0.425   * |       0.025      0.053  **
+CDNow               0.387     0.385   * |       0.053      0.031  **
+Grocery             0.517     0.520   * |       0.034      0.065  **
+OnlineRetailII      0.781     0.785  ** |       0.210      0.215  **
+Dunnhumby           6.988     7.000  ** |       0.166      0.159  **
+
+[saved] C:\Users\Pranava Baascaran\Desktop\Projects\pareto-nbd-extension\results\bgnbd_study_summary.csv

@@ -1,0 +1,20 @@
+Loading datasets...
+[Simulated] 15 seeds done (17s)
+[CDNow] 15 seeds done (15s)
+[Grocery] 15 seeds done (9s)
+[OnlineRetailII] 15 seeds done (17s)
+[Olist] 15 seeds done (132s)
+[Dunnhumby] 15 seeds done (21s)
+[Ta-Feng] 15 seeds done (141s)
+
+=== Conformalized BTYD: raw -> recalibrated (mean over seeds, all customers) ===
+dataset          PIT-KS raw  PIT-KS recal sig |   CRPS raw  CRPS recal sig
+Simulated             0.031         0.034   * |      0.413       0.414    
+CDNow                 0.056         0.034 *** |      0.383       0.382    
+Grocery               0.036         0.036     |      0.515       0.513    
+OnlineRetailII        0.212         0.044 *** |      0.780       0.649 ***
+Olist                 0.010         0.009   * |      0.017       0.017   *
+Dunnhumby             0.164         0.097 *** |      6.924       6.713 ***
+Ta-Feng               0.072         0.027 *** |      0.948       0.940 ***
+
+[saved] C:\Users\Pranava Baascaran\Desktop\Projects\pareto-nbd-extension\results\conformal_study_summary.csv

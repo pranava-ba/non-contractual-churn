@@ -1,0 +1,39 @@
+Training amortizer...
+  trained in 136s
+  held-out cohort 1/25
+  held-out cohort 2/25
+  held-out cohort 3/25
+  held-out cohort 4/25
+  held-out cohort 5/25
+  held-out cohort 6/25
+  held-out cohort 7/25
+  held-out cohort 8/25
+  held-out cohort 9/25
+  held-out cohort 10/25
+  held-out cohort 11/25
+  held-out cohort 12/25
+  held-out cohort 13/25
+  held-out cohort 14/25
+  held-out cohort 15/25
+  held-out cohort 16/25
+  held-out cohort 17/25
+  held-out cohort 18/25
+  held-out cohort 19/25
+  held-out cohort 20/25
+  held-out cohort 21/25
+  held-out cohort 22/25
+  held-out cohort 23/25
+  held-out cohort 24/25
+  held-out cohort 25/25
+
+=== Held-out simulated cohorts (n=25), MCMC vs Amortized (all customers) ===
+  CRPS     MCMC 0.560±0.340   Amortized 0.555±0.331   Wilcoxon p=0.508
+  pit_ks   MCMC 0.037±0.017   Amortized 0.032±0.012   Wilcoxon p=0.045
+
+=== Real datasets ===
+  CDNow           PIT-KS MCMC 0.042 Amortized 0.040
+  Grocery         PIT-KS MCMC 0.039 Amortized 0.037
+  OnlineRetailII  PIT-KS MCMC 0.207 Amortized 0.121
+  Dunnhumby       PIT-KS MCMC 0.168 Amortized 0.161
+
+[saved] C:\Users\Pranava Baascaran\Desktop\Projects\pareto-nbd-extension\results\amortized_summary.csv

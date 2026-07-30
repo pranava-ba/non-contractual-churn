@@ -38,6 +38,17 @@ Added purchase-timing forecasting (`timing.py`, Extension B) and Gamma-Gamma
 probabilistic CLV (`clv.py`, Extension E); PEP 621 packaging, MIT license, pytest suite,
 Sphinx/ReadTheDocs docs, and a Pyodide interactive app.
 
+### M7 — Statistical vs. machine-learned calibration benchmark (Phase 2)
+Brought machine learning into the same proper-scoring lens across counts, value, churn and
+timing, on seven public cohorts (active rates 1.6%→96%). **Result:** calibration is governed
+by the shared **parametric count assumption** — invariant to estimation method
+(MLE ≈ MCMC ≈ amortized) and to model variant (Pareto/NBD ≈ BG/NBD) — and is repairable
+model-agnostically (**Conformalized BTYD**) or structurally (**Pareto/GGG** timing). Added
+`ml_benchmark`, `conformal`, `amortized`, `estimate_bgnbd`, `clv_benchmark`/`clv_data`,
+`covariate_benchmark`, `churn`, and `datasets`, each with a confirmed multi-seed study runner
+and `results/*_summary.csv`. CI (GitHub Actions), `CITATION.cff`, and a `make reproduce`
+Makefile were added alongside.
+
 ## Release history
 
 | Version | Date | Highlights |
@@ -48,17 +59,18 @@ See the [CHANGELOG](CHANGELOG.md) for details.
 
 ## Roadmap (planned)
 
-- **Integrate the extensions into scored studies.** Wire `timing.py` and `clv.py` into
-  runner scripts and report CRPS/PIT/coverage tables for `t_{x+1}` and CLV, mirroring the
-  purchase-count study.
-- **Extension C — model & ML benchmark.** Add BG/NBD, MBG/NBD, and a gradient-boosted
-  RFM baseline under the same proper-scoring lens; test whether *model* choice (as opposed
-  to estimation method) moves calibration.
+Completed in **M7** (see above): the extensions are now wired into scored studies
+(`run_timing_study.py`, `run_clv_study.py`); the model/ML benchmark and BG/NBD are done
+(`ml_benchmark.py`, `estimate_bgnbd.py`); and the covariate question is answered
+(`covariate_benchmark.py` — demographics add nothing over RFM). Still open:
+
 - **Heterogeneous-k Pareto/GGG.** Generalise the common-`k` sampler to
   `k_i ~ Γ(t, γ)` (full Platzer–Reutterer), nesting the current model.
-- **Covariates.** Time-varying and customer-level covariates in the purchase and dropout
-  processes, and their effect on calibration.
+- **More BTYD variants.** MBG/NBD and BG/CNBD-k under the same lens (BG/NBD already showed the
+  variant is immaterial).
 - **Further misspecification axes.** Non-stationarity, seasonality, and dependence between
   the purchase and dropout processes.
 - **Log-score in the main grid.** Persist predictive draws so the logarithmic score is
   reported across the full simulation grid, not only representative datasets.
+- **Importable package API.** Refactor `src/` into an installable `paretonbd` library, then
+  PyPI/Zenodo release (deferred to the very end).

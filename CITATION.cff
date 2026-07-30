@@ -1,0 +1,38 @@
+cff-version: 1.2.0
+message: "If you use this software or its results, please cite it as below."
+title: "pareto-nbd-extension: probabilistic forecasting & calibration for buy-till-you-die models"
+abstract: >-
+  A Python framework for the probabilistic evaluation of Pareto/NBD and Pareto/GGG
+  buy-till-you-die models using proper scoring rules (CRPS, log score), randomized-PIT
+  calibration diagnostics, interval coverage, and TOST equivalence tests, with MCMC and
+  robust maximum-likelihood estimation, purchase-timing and Gamma-Gamma CLV extensions,
+  and a machine-learning calibration benchmark.
+type: software
+authors:
+  - given-names: "Pranava"
+    family-names: "BA"
+    email: "pranavabaascaran@gmail.com"
+    affiliation: "Easwari Engineering College"
+  - given-names: "Vyasa R"
+    family-names: "Rajesawaran"
+    affiliation: "Easwari Engineering College"
+version: "1.0.0"
+date-released: "2026-07-28"
+license: "MIT"
+keywords:
+  - customer base analysis
+  - Pareto/NBD
+  - probabilistic forecasting
+  - calibration
+  - proper scoring rules
+  - Markov Chain Monte Carlo
+  - customer churn
+preferred-citation:
+  type: article
+  title: "Non-contractual churn with MCMC: are Pareto/NBD purchase forecasts calibrated?"
+  year: 2026
+  authors:
+    - given-names: "Pranava"
+      family-names: "BA"
+    - given-names: "Vyasa R"
+      family-names: "Rajesawaran"

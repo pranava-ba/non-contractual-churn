@@ -1,0 +1,487 @@
+<title>Zeroth Review — Study Guide: Non-Contractual Churn & BTYD Models</title>
+<style>
+  :root{
+    --bg:#F3F4F9; --surface:#FFFFFF; --surface-2:#F7F8FC;
+    --ink:#191D2E; --muted:#586079; --line:#E3E5F0;
+    --primary:#28368A;      /* ink indigo — structure */
+    --accent:#6C3FA3;       /* plum — the BTYD core */
+    --alive:#0E8A69;        /* teal-green — active / alive */
+    --risk:#C0480E;         /* ember — churn risk */
+    --alive-bg:#E4F4EE; --risk-bg:#FBEDE4; --accent-bg:#F0EAF8; --primary-bg:#E8EBF7;
+    --shadow:0 1px 2px rgba(20,24,45,.05),0 6px 24px -12px rgba(20,24,45,.14);
+    --measure:70ch;
+    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"Cascadia Code",ui-monospace,"SF Mono",Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#111420; --surface:#191D2B; --surface-2:#1F2436;
+      --ink:#ECEEF6; --muted:#9AA0B9; --line:#2B3048;
+      --primary:#93A6FF; --accent:#C6A2F2; --alive:#3BD9AB; --risk:#FB934A;
+      --alive-bg:#123128; --risk-bg:#3A2115; --accent-bg:#241B38; --primary-bg:#1A2145;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 30px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#F3F4F9; --surface:#FFFFFF; --surface-2:#F7F8FC; --ink:#191D2E; --muted:#586079; --line:#E3E5F0;
+    --primary:#28368A; --accent:#6C3FA3; --alive:#0E8A69; --risk:#C0480E;
+    --alive-bg:#E4F4EE; --risk-bg:#FBEDE4; --accent-bg:#F0EAF8; --primary-bg:#E8EBF7;
+    --shadow:0 1px 2px rgba(20,24,45,.05),0 6px 24px -12px rgba(20,24,45,.14);
+  }
+  :root[data-theme="dark"]{
+    --bg:#111420; --surface:#191D2B; --surface-2:#1F2436; --ink:#ECEEF6; --muted:#9AA0B9; --line:#2B3048;
+    --primary:#93A6FF; --accent:#C6A2F2; --alive:#3BD9AB; --risk:#FB934A;
+    --alive-bg:#123128; --risk-bg:#3A2115; --accent-bg:#241B38; --primary-bg:#1A2145;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 30px -14px rgba(0,0,0,.6);
+  }
+  *{box-sizing:border-box}
+  body{margin:0}
+  .page{background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.62;font-size:17px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:clamp(20px,4vw,56px) clamp(16px,4vw,40px)}
+  .layout{display:grid;grid-template-columns:1fr;gap:40px}
+  @media(min-width:1000px){.layout{grid-template-columns:210px minmax(0,1fr);gap:52px;align-items:start}}
+
+  /* ---- header ---- */
+  header.hero{border-bottom:1px solid var(--line);padding-bottom:28px;margin-bottom:8px}
+  .eyebrow{font-family:var(--mono);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--primary);display:flex;align-items:center;gap:10px;margin:0 0 18px}
+  .eyebrow::before{content:"";width:26px;height:2px;background:var(--primary);border-radius:2px}
+  h1{font-family:var(--serif);font-weight:700;letter-spacing:-.01em;text-wrap:balance;
+    font-size:clamp(30px,5vw,46px);line-height:1.08;margin:0 0 16px}
+  h1 .fade{color:var(--muted)}
+  .lede{font-size:clamp(17px,2.2vw,20px);color:var(--muted);max-width:64ch;margin:0}
+  .howto{margin-top:22px;background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:14px 18px;font-size:14.5px;color:var(--muted);display:flex;gap:12px;align-items:flex-start;box-shadow:var(--shadow)}
+  .howto b{color:var(--ink)}
+  .howto .k{font-family:var(--mono);color:var(--accent);font-weight:600}
+
+  /* ---- side nav ---- */
+  nav.toc{position:sticky;top:20px;font-size:14px}
+  nav.toc .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);margin:0 0 12px}
+  nav.toc ol{list-style:none;margin:0;padding:0;counter-reset:s;display:flex;flex-direction:column;gap:3px}
+  nav.toc a{counter-increment:s;display:flex;gap:10px;text-decoration:none;color:var(--muted);
+    padding:6px 10px;border-radius:8px;transition:background .15s,color .15s}
+  nav.toc a::before{content:counter(s,decimal-leading-zero);font-family:var(--mono);font-size:11px;
+    color:var(--primary);opacity:.7;padding-top:2px}
+  nav.toc a:hover{background:var(--surface);color:var(--ink)}
+  @media(max-width:999px){nav.toc{position:static;order:-1;background:var(--surface);border:1px solid var(--line);
+    border-radius:12px;padding:16px}}
+
+  /* ---- sections ---- */
+  section{margin:0 0 46px;scroll-margin-top:20px}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+  h2{font-family:var(--serif);font-weight:700;font-size:clamp(22px,3vw,29px);line-height:1.15;
+    letter-spacing:-.01em;text-wrap:balance;margin:0 0 6px}
+  h2 .num{color:var(--muted);font-size:.7em;margin-right:.5em;font-variant-numeric:tabular-nums}
+  .sub{color:var(--muted);margin:0 0 22px;max-width:var(--measure)}
+  p{max-width:var(--measure)}
+  h3{font-size:18px;margin:26px 0 8px;font-weight:650}
+  strong{color:var(--ink);font-weight:650}
+  .em-alive{color:var(--alive);font-weight:650}
+  .em-risk{color:var(--risk);font-weight:650}
+  .em-acc{color:var(--accent);font-weight:650}
+  a.inl{color:var(--primary);text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px}
+
+  /* cards */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px 24px;box-shadow:var(--shadow)}
+  .grid{display:grid;gap:16px}
+  @media(min-width:640px){.cols-2{grid-template-columns:1fr 1fr}}
+  .pitch{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px 28px;box-shadow:var(--shadow)}
+  .pitch p{font-size:18px;max-width:none}
+  .pitch p+p{margin-top:14px}
+
+  /* concept callout */
+  .callout{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:18px 0}
+  .callout .tag{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    padding:2px 9px;border-radius:999px;margin-bottom:8px;font-weight:600}
+  .tag.why{background:var(--primary-bg);color:var(--primary)}
+  .tag.key{background:var(--accent-bg);color:var(--accent)}
+  .tag.alive{background:var(--alive-bg);color:var(--alive)}
+  .tag.risk{background:var(--risk-bg);color:var(--risk)}
+  .callout p{margin:0;max-width:none;font-size:15.5px}
+
+  /* formula */
+  .formula{font-family:var(--mono);background:var(--surface-2);border:1px solid var(--line);border-radius:10px;
+    padding:13px 16px;margin:14px 0;font-size:14.5px;overflow-x:auto;color:var(--ink)}
+  .formula .c{color:var(--muted)}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface-2);border:1px solid var(--line);
+    padding:1px 6px;border-radius:6px}
+
+  /* table */
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);background:var(--surface)}
+  table{border-collapse:collapse;width:100%;min-width:560px;font-size:15px}
+  th,td{text-align:left;padding:13px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+    background:var(--surface-2)}
+  tbody tr:last-child td{border-bottom:none}
+  td.rowh{font-weight:600;color:var(--ink);width:26%}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600}
+  .pill.p{background:var(--primary-bg);color:var(--primary)}
+  .pill.a{background:var(--accent-bg);color:var(--accent)}
+
+  /* lists */
+  ul.clean{max-width:var(--measure);padding-left:0;list-style:none;margin:14px 0;display:flex;flex-direction:column;gap:11px}
+  ul.clean li{position:relative;padding-left:26px}
+  ul.clean li::before{content:"";position:absolute;left:4px;top:.62em;width:7px;height:7px;border-radius:2px;
+    background:var(--primary);transform:rotate(45deg)}
+  ul.clean li.a::before{background:var(--alive)}
+  ul.clean li.r::before{background:var(--risk)}
+
+  /* timeline svg */
+  figure.viz{margin:20px 0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:var(--shadow)}
+  figure.viz svg{width:100%;height:auto;display:block}
+  figcaption{color:var(--muted);font-size:13.5px;margin-top:12px;text-align:center}
+  .s-line{stroke:var(--line)} .s-axis{stroke:var(--muted)} .s-buy{fill:var(--primary)}
+  .s-alive{stroke:var(--alive)} .s-dead{stroke:var(--risk)} .t-ink{fill:var(--ink)} .t-mut{fill:var(--muted)}
+  .t-alive{fill:var(--alive)} .t-risk{fill:var(--risk)}
+
+  /* script list */
+  .script{display:flex;flex-direction:column;gap:2px}
+  .script .row{display:grid;grid-template-columns:auto 1fr;gap:16px;padding:13px 4px;border-bottom:1px solid var(--line)}
+  .script .row:last-child{border-bottom:none}
+  .script .sn{font-family:var(--mono);font-size:12px;color:var(--primary);font-weight:600;white-space:nowrap;padding-top:2px}
+  .script .st{margin:0;max-width:none;font-size:15.5px}
+  .script .st b{color:var(--ink)}
+
+  /* Q&A */
+  details{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin:10px 0;overflow:hidden;box-shadow:var(--shadow)}
+  details[open]{border-color:color-mix(in srgb,var(--primary) 40%,var(--line))}
+  summary{cursor:pointer;list-style:none;padding:15px 18px;font-weight:600;display:flex;gap:12px;align-items:flex-start;color:var(--ink)}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"Q";font-family:var(--serif);font-weight:700;color:var(--primary);
+    background:var(--primary-bg);width:24px;height:24px;border-radius:6px;display:grid;place-items:center;font-size:14px;flex:none}
+  summary:hover{background:var(--surface-2)}
+  details .ans{padding:0 18px 17px 48px;color:var(--muted);font-size:15.5px}
+  details .ans p{max-width:none;margin:0 0 10px}
+  details .ans p:last-child{margin:0}
+
+  /* cheat */
+  .cheat{display:grid;gap:12px}
+  @media(min-width:720px){.cheat{grid-template-columns:1fr 1fr}}
+  .term{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:13px 16px;box-shadow:var(--shadow)}
+  .term dt{font-family:var(--mono);font-size:13px;color:var(--accent);font-weight:600;margin-bottom:3px}
+  .term dd{margin:0;font-size:14.5px;color:var(--muted)}
+  .term dd b{color:var(--ink)}
+
+  footer{border-top:1px solid var(--line);margin-top:8px;padding-top:22px;color:var(--muted);font-size:13.5px}
+  .brace{font-family:var(--mono);color:var(--primary)}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="page"><div class="wrap"><div class="layout">
+
+  <nav class="toc" aria-label="Contents">
+    <p class="lbl">Contents</p>
+    <ol>
+      <a href="#pitch">Your 60-second pitch</a>
+      <a href="#big">The problem</a>
+      <a href="#blocks">Building blocks</a>
+      <a href="#nbd">Why "negative binomial"</a>
+      <a href="#models">Pareto/NBD vs BG/NBD</a>
+      <a href="#decision">P(alive), CLV &amp; money</a>
+      <a href="#estimation">Estimating the model</a>
+      <a href="#ml">Why add machine learning</a>
+      <a href="#arch">The architecture</a>
+      <a href="#script">Slide-by-slide script</a>
+      <a href="#qa">Questions they'll ask</a>
+      <a href="#cheat">One-page cheat sheet</a>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="hero">
+      <p class="eyebrow">Zeroth Review · Presenter's Study Guide</p>
+      <h1>Predicting non-contractual churn with <span class="fade">negative-binomial (Buy-Till-You-Die) models</span></h1>
+      <p class="lede">Everything on your slides, explained from the ground up — so you can present it and defend it in the Q&amp;A tomorrow.</p>
+      <div class="howto">
+        <span>📌</span>
+        <span>Read <b>top to bottom once</b> for understanding, then drill the <b class="k">Questions they'll ask</b> section by covering the answer and reciting it. If you remember only one thing, memorise the <b class="k">60-second pitch</b>.</span>
+      </div>
+    </header>
+
+    <!-- PITCH -->
+    <section id="pitch">
+      <p class="kicker">Start here</p>
+      <h2>Your 60-second pitch</h2>
+      <p class="sub">If the panel says "tell us about your project," say this. It contains every keyword on your deck in the right order.</p>
+      <div class="pitch">
+        <p>In businesses like e-commerce, retail or gaming, a customer never tells you they've left — they just quietly <strong>stop buying</strong>. That's <span class="em-risk">non-contractual churn</span>, and unlike a Netflix cancellation there is <strong>no label</strong> that says who churned and when.</p>
+        <p>We predict it with <span class="em-acc">Buy-Till-You-Die (BTYD)</span> models. Each customer is two hidden processes: while <span class="em-alive">"alive"</span> they purchase at random moments (a <strong>Poisson process</strong>), and at some unseen time they <span class="em-risk">"die"</span> — drop out forever. Because different customers buy at different rates, the population's purchase counts follow a <strong>Negative Binomial Distribution</strong> — that's the "NBD."</p>
+        <p>From only each customer's <strong>Recency, Frequency and age on file (RFM + T)</strong>, the model computes <strong>P(alive)</strong> — the probability they're still active — which is our churn score. A <strong>Gamma-Gamma</strong> model adds each customer's monetary value, giving <strong>Customer Lifetime Value (CLV)</strong>. We benchmark these interpretable probability models against machine-learning baselines. <strong>The novelty:</strong> we use the model's P(alive) as a <em>soft churn label</em> to get around the missing labels, and we prioritise retention by customer <em>value</em>, not just churn risk.</p>
+      </div>
+    </section>
+
+    <!-- BIG PICTURE -->
+    <section id="big">
+      <p class="kicker">The problem</p>
+      <h2><span class="num">01</span>Contractual vs non-contractual — and why churn goes invisible</h2>
+      <p class="sub">This is the framing your whole project rests on. Nail the distinction and the rest follows.</p>
+      <div class="grid cols-2">
+        <div class="card">
+          <h3 style="margin-top:0">Contractual</h3>
+          <p style="font-size:15.5px">Netflix, a gym, a phone plan. The customer <strong>signs up and cancels</strong>. You see the exact churn event and date. Churn is <span class="em-alive">observed and labelled</span> — ordinary supervised classification works.</p>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0">Non-contractual</h3>
+          <p style="font-size:15.5px">Amazon, a shop, a mobile game. Customers <strong>buy whenever they like</strong> with no subscription. Someone silent for 3 months might be gone — or just between purchases. Churn is <span class="em-risk">latent (hidden)</span> and must be <strong>inferred</strong>.</p>
+        </div>
+      </div>
+      <div class="callout">
+        <span class="tag risk">Why it's hard</span>
+        <p><b>(1)</b> No churn label to train on. <b>(2)</b> Silence is ambiguous — a dormant customer looks identical to a dead one. <b>(3)</b> Purchases are irregular, so simple "days since last order" rules are noisy. BTYD models solve all three by <em>modelling the invisible dropout</em> instead of needing a label for it.</p>
+      </div>
+    </section>
+
+    <!-- BUILDING BLOCKS -->
+    <section id="blocks">
+      <p class="kicker">Building blocks</p>
+      <h2><span class="num">02</span>RFM + T, and the two hidden processes</h2>
+      <p class="sub">BTYD needs only a compact summary of each customer's history — no demographics, no labels.</p>
+
+      <h3>The inputs: RFM + T</h3>
+      <ul class="clean">
+        <li><strong>Recency</strong> — <em>when</em> the last purchase happened (the model uses <code>t_x</code>, the customer's age at their last transaction). Recent buyer → probably alive.</li>
+        <li><strong>Frequency</strong> — <em>how many</em> repeat purchases, <code>x</code>. (Repeat only: the first purchase starts the clock.)</li>
+        <li><strong>Monetary</strong> — average spend per transaction, <code>m</code>. Used later by Gamma-Gamma, not by the churn part.</li>
+        <li><strong>T (age on file)</strong> — total time observed, from first purchase to the end of the study window.</li>
+      </ul>
+      <div class="callout">
+        <span class="tag key">The trio that matters</span>
+        <p>The churn model runs on just <code>(x, t_x, T)</code> — frequency, recency, and how long you've watched the customer. That's it. From these three numbers per customer it recovers everything.</p>
+      </div>
+
+      <h3>"Buy Till You Die" = two processes</h3>
+      <ul class="clean">
+        <li class="a"><strong>Transaction process (while alive):</strong> the customer makes purchases at random times at some personal average rate λ — a <strong>Poisson process</strong>.</li>
+        <li class="r"><strong>Dropout process (death):</strong> at some <em>unobserved</em> moment the customer becomes permanently inactive. You never see this happen — you infer it from the silence that follows.</li>
+      </ul>
+
+      <figure class="viz">
+        <svg viewBox="0 0 700 150" role="img" aria-label="Timeline showing a customer purchasing several times, then dropping out, then a gap of no purchases.">
+          <line class="s-axis" x1="40" y1="95" x2="660" y2="95" stroke-width="1.5"/>
+          <!-- observed window bracket -->
+          <line class="s-line" x1="40" y1="30" x2="40" y2="110" stroke-width="1" stroke-dasharray="3 3"/>
+          <line class="s-line" x1="560" y1="30" x2="560" y2="110" stroke-width="1" stroke-dasharray="3 3"/>
+          <text class="t-mut" x="40" y="22" font-size="12" font-family="ui-monospace,monospace">first purchase</text>
+          <text class="t-mut" x="560" y="22" font-size="12" text-anchor="end" font-family="ui-monospace,monospace">today (T)</text>
+          <!-- alive span -->
+          <line class="s-alive" x1="40" y1="95" x2="300" y2="95" stroke-width="4" stroke-linecap="round"/>
+          <text class="t-alive" x="150" y="125" font-size="13" text-anchor="middle" font-family="ui-monospace,monospace">alive · buying</text>
+          <!-- purchase ticks -->
+          <g class="s-buy">
+            <circle cx="40" cy="95" r="6"/><circle cx="95" cy="95" r="6"/><circle cx="150" cy="95" r="6"/>
+            <circle cx="215" cy="95" r="6"/><circle cx="300" cy="95" r="6"/>
+          </g>
+          <text class="t-mut" x="300" y="80" font-size="12" text-anchor="middle" font-family="ui-monospace,monospace">last seen (t_x)</text>
+          <!-- death X -->
+          <g class="s-dead" stroke-width="3" stroke-linecap="round">
+            <line x1="352" y1="86" x2="368" y2="104"/><line x1="368" y1="86" x2="352" y2="104"/>
+          </g>
+          <text class="t-risk" x="360" y="125" font-size="13" text-anchor="middle" font-family="ui-monospace,monospace">dies (unseen)</text>
+          <!-- silence -->
+          <line class="s-dead" x1="380" y1="95" x2="560" y2="95" stroke-width="2" stroke-dasharray="4 5"/>
+          <text class="t-mut" x="470" y="125" font-size="13" text-anchor="middle" font-family="ui-monospace,monospace">silence → churn?</text>
+        </svg>
+        <figcaption>The core intuition: purchases stop for two possible reasons — the customer <em>died</em>, or they're just between buys. The model weighs the length of silence against their past rhythm to output <strong>P(alive)</strong>.</figcaption>
+      </figure>
+    </section>
+
+    <!-- NBD -->
+    <section id="nbd">
+      <p class="kicker">The statistical engine</p>
+      <h2><span class="num">03</span>Why "Negative Binomial"?</h2>
+      <p class="sub">This is the single most likely deep-dive question. Here's the clean answer.</p>
+      <p>One customer, while alive, buys at random at rate λ, so over a period their purchase count is <strong>Poisson(λ)</strong>. But customers are <strong>not</strong> identical — some are heavy buyers (high λ), some light (low λ). We model that spread of rates with a <strong>Gamma distribution</strong>.</p>
+      <div class="formula">
+        λ <span class="c">~</span> Gamma(r, α)  <span class="c">— spread of purchase rates across customers</span><br>
+        count | λ <span class="c">~</span> Poisson(λt)  <span class="c">— one customer's buying</span><br>
+        <span class="c">─────────── mix the two ───────────</span><br>
+        count <span class="c">~</span> <b>Negative Binomial (NBD)</b>
+      </div>
+      <p>Mathematically, a <strong>Poisson whose rate is Gamma-distributed becomes a Negative Binomial</strong>. So the NBD is what you get when you allow every customer to have their own buying rate.</p>
+      <div class="callout">
+        <span class="tag why">Why not just Poisson?</span>
+        <p>Real purchase data is <strong>overdispersed</strong> — its variance is much larger than its mean, because of that customer-to-customer variation. A single Poisson forces variance = mean and fits badly. The Negative Binomial has an extra parameter that absorbs the overdispersion. <em>That is the whole reason "negative binomial" is in your project title.</em></p>
+      </div>
+    </section>
+
+    <!-- MODELS -->
+    <section id="models">
+      <p class="kicker">The two models on your slides</p>
+      <h2><span class="num">04</span>Pareto/NBD vs BG/NBD</h2>
+      <p class="sub">Both share the NBD buying engine. They differ only in <em>how they model death</em>. Know this table cold.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th></th><th>Pareto/NBD <span class="pill p">1987</span></th><th>BG/NBD <span class="pill a">2005</span></th></tr></thead>
+          <tbody>
+            <tr><td class="rowh">Buying while alive</td><td>Poisson, λ ~ Gamma(r, α) → NBD</td><td>Same — Poisson, λ ~ Gamma(r, α) → NBD</td></tr>
+            <tr><td class="rowh">When can a customer die?</td><td>At <strong>any</strong> moment in continuous time. Lifetime ~ Exponential(μ), and μ ~ Gamma(s, β) → a <strong>Pareto</strong> distribution of lifetimes.</td><td>Only <strong>right after a purchase</strong>. After each buy they flip a coin — probability <em>p</em> it was their last. <em>p</em> ~ Beta(a, b) → "<strong>Beta-Geometric</strong>."</td></tr>
+            <tr><td class="rowh">Parameters</td><td><code>r, α, s, β</code></td><td><code>r, α, a, b</code></td></tr>
+            <tr><td class="rowh">Math / implementation</td><td>Needs numerical integration — heavier to fit.</td><td><strong>Closed-form</strong> likelihood — "Counting Your Customers <em>the Easy Way</em>." Easy to code; what most libraries use.</td></tr>
+            <tr><td class="rowh">In one line</td><td>The original gold standard.</td><td>Near-identical accuracy, far simpler — your practical default.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout">
+        <span class="tag key">The only real difference</span>
+        <p>Pareto/NBD lets death happen at any time; BG/NBD assumes you only "decide to leave" just after buying. That one simplification removes the hard integral and makes BG/NBD the go-to. Both output the same two things: <strong>P(alive)</strong> and <strong>expected future purchases</strong>.</p>
+      </div>
+    </section>
+
+    <!-- DECISION -->
+    <section id="decision">
+      <p class="kicker">From model to decision</p>
+      <h2><span class="num">05</span>P(alive), Gamma-Gamma &amp; CLV</h2>
+      <p class="sub">The model outputs three things a business can act on.</p>
+
+      <h3>1 · P(alive) — the churn score</h3>
+      <p>Given a customer's <code>(x, t_x, T)</code>, the model computes the probability they are <span class="em-alive">still active</span> now. Bought often and recently → high P(alive). A long silence after a burst of buying → <span class="em-risk">low P(alive)</span> → likely churned. <strong>No label needed</strong> — it's inferred from behaviour and the fitted model. This is your churn prediction.</p>
+
+      <h3>2 · Gamma-Gamma — how much they spend</h3>
+      <p>BTYD says <em>how many</em> future purchases; the <strong>Gamma-Gamma</strong> model says <em>how much per purchase</em>. It assumes each customer's spend varies around their own average, and those averages are Gamma-distributed across customers (hence the name). Key assumption: <strong>monetary value is independent of purchase frequency</strong> — a claim you can check (the correlation should be near zero).</p>
+
+      <h3>3 · CLV — putting it together</h3>
+      <div class="formula">
+        CLV <span class="c">≈</span> expected future transactions <span class="c">(BTYD)</span>
+        <span class="c">×</span> expected value per transaction <span class="c">(Gamma-Gamma)</span>,
+        discounted over time
+      </div>
+      <p><strong>Customer Lifetime Value</strong> is what a customer is worth going forward. It lets you rank customers, so retention effort goes to the <span class="em-risk">high-value</span> people who are <span class="em-risk">also at risk</span> — not just anyone likely to leave.</p>
+    </section>
+
+    <!-- ESTIMATION -->
+    <section id="estimation">
+      <p class="kicker">Fitting the parameters</p>
+      <h2><span class="num">06</span>How you actually estimate the model</h2>
+      <p class="sub">"Fitting" means finding r, α, and the dropout parameters from data. Three ways — and one of your papers (Simon, 2025) compares them.</p>
+      <div class="grid cols-2">
+        <div class="card"><h3 style="margin-top:0">MLE — Maximum Likelihood</h3><p style="font-size:15px">Pick the parameters that make the observed data most likely. Fast, standard, gives a single best estimate. <strong>Your default.</strong></p></div>
+        <div class="card"><h3 style="margin-top:0">MCMC — Bayesian sampling</h3><p style="font-size:15px">Sample the full posterior distribution of the parameters. Gives uncertainty bounds and supports richer hierarchical models — but slower and heavier.</p></div>
+      </div>
+      <div class="callout">
+        <span class="tag why">Heuristics &amp; the finding</span>
+        <p>Heuristics are quick rules-of-thumb — fastest, least accurate. Simon (2025) showed the <strong>model-based methods (MLE / MCMC) beat heuristics</strong> for forecasting active customers and future purchases. That's why your slide lists all three and why benchmarking them is part of the plan.</p>
+      </div>
+    </section>
+
+    <!-- ML -->
+    <section id="ml">
+      <p class="kicker">The modern layer &amp; your contribution</p>
+      <h2><span class="num">07</span>Why add machine learning — and what's novel</h2>
+      <p class="sub">BTYD is interpretable but rigid. ML is flexible but label-hungry. Your project sits in the gap between them.</p>
+
+      <h3>Limits of pure BTYD</h3>
+      <ul class="clean">
+        <li>Assumes Poisson buying and one behaviour pattern for everyone.</li>
+        <li><strong>Ignores covariates</strong> — it can't use age, channel, product category, promotions, etc.</li>
+      </ul>
+      <h3>What ML adds (and its catch)</h3>
+      <ul class="clean">
+        <li class="a"><strong>XGBoost / gradient boosting, DNNs, GRU/LSTM</strong> use many features, capture non-linear and individual-level patterns.</li>
+        <li class="r"><strong>The catch:</strong> they need churn labels (which non-contractual data lacks) and are far less interpretable.</li>
+      </ul>
+      <div class="callout">
+        <span class="tag key">Zero-inflation &amp; hurdle models</span>
+        <p>Most customers make <strong>zero</strong> repeat purchases, so the target has a big spike at 0 that breaks ordinary regressors. A <strong>two-stage "hurdle" model</strong> (Lin, 2026) splits it: Stage 1 predicts <em>will they buy at all?</em>, Stage 2 predicts <em>how much?</em></p>
+      </div>
+      <div class="callout">
+        <span class="tag risk">The research gap = your novelty</span>
+        <p>Non-contractual data has <strong>no churn labels</strong>, so supervised ML is stuck. BTYD's <strong>P(alive) is an unsupervised, probabilistic "soft label."</strong> Your contribution: <b>(1)</b> use P(alive) as that soft label; <b>(2)</b> unify BTYD's interpretable latent-churn inference with ML's feature richness in one pipeline; <b>(3)</b> make it <strong>value-aware</strong> by weighting churn risk with Gamma-Gamma CLV; <b>(4)</b> benchmark the estimation methods.</p>
+      </div>
+    </section>
+
+    <!-- ARCH -->
+    <section id="arch">
+      <p class="kicker">Reading your diagram</p>
+      <h2><span class="num">08</span>The architecture, narrated</h2>
+      <p class="sub">Trace the six boxes out loud in this order — that's the whole system.</p>
+      <ul class="clean">
+        <li><strong>Transaction Data</strong> — raw e-commerce / retail purchase logs (customer, date, amount).</li>
+        <li><strong>RFM Feature Extraction</strong> — collapse the logs into per-customer <code>(Recency, Frequency, Monetary, T)</code>.</li>
+        <li class="a"><strong>BTYD Models (BG/NBD &amp; Pareto/NBD)</strong> — the core: estimate <strong>P(alive)</strong> and expected future transactions.</li>
+        <li><strong>Gamma-Gamma CLV + ML benchmark</strong> — attach monetary value → CLV, and compare against XGBoost / DNN baselines.</li>
+        <li class="r"><strong>Churn &amp; CLV Scoring</strong> — flag a customer at-risk when P(alive) drops below a threshold; rank the at-risk by CLV.</li>
+        <li><strong>Retention Actions &amp; Targeting</strong> — send the offer to high-value, high-risk customers.</li>
+      </ul>
+      <div class="callout">
+        <span class="tag why">Say this</span>
+        <p>"Data flows left to right along the top — raw logs become RFM features, which feed the BTYD core. It drops down to the CLV and ML layer, then to scoring, and finally to the retention action. The <span class="em-acc">purple box is the heart</span> of the project: the negative-binomial models that infer churn without a label."</p>
+      </div>
+    </section>
+
+    <!-- SCRIPT -->
+    <section id="script">
+      <p class="kicker">Delivery</p>
+      <h2><span class="num">09</span>Slide-by-slide talking script</h2>
+      <p class="sub">One or two sentences to say on each slide. Keep it to this — don't read the bullets aloud.</p>
+      <div class="card script">
+        <div class="row"><span class="sn">1 · Title</span><p class="st"><b>"Our project predicts customer churn in non-contractual settings using negative-binomial Buy-Till-You-Die models."</b> Introduce yourselves and your guide.</p></div>
+        <div class="row"><span class="sn">2 · Intro</span><p class="st">Set up the problem: in non-contractual businesses churn is silent and unlabelled; BTYD infers it from RFM using P(alive).</p></div>
+        <div class="row"><span class="sn">3 · Objective</span><p class="st">Five aims: model latent churn, estimate P(alive), add CLV, benchmark vs ML, deliver an interpretable pipeline on UCI Online Retail II.</p></div>
+        <div class="row"><span class="sn">4–6 · Literature</span><p class="st">Walk 2–3 rows, not every cell. Group them: "the BTYD core papers, the BTYD-vs-ML comparisons, and the deep-learning churn papers."</p></div>
+        <div class="row"><span class="sn">7 · Summary</span><p class="st">State the gap explicitly: few systems fuse BTYD's latent-churn inference with ML feature richness — that gap is what we target.</p></div>
+        <div class="row"><span class="sn">8 · Architecture</span><p class="st">Narrate the six boxes (previous section). Emphasise the purple BTYD core.</p></div>
+        <div class="row"><span class="sn">9–10 · Proposed</span><p class="st">Slide 9 = the method (RFM → BTYD → Gamma-Gamma → scoring). Slide 10 = tools (Python, <code>lifetimes</code>, XGBoost), dataset, and evaluation metrics.</p></div>
+        <div class="row"><span class="sn">11 · Novelty</span><p class="st">The four contribution points — lead with "P(alive) as a soft churn label."</p></div>
+        <div class="row"><span class="sn">12–14 · References</span><p class="st">Don't read them; "all sources are 2023–2026 peer-reviewed journal articles."</p></div>
+      </div>
+    </section>
+
+    <!-- QA -->
+    <section id="qa">
+      <p class="kicker">Defence</p>
+      <h2><span class="num">10</span>Questions they'll ask — cover the answer and recite</h2>
+      <p class="sub">Zeroth-review panels probe fundamentals and scope. These are the likely ones.</p>
+
+      <details><summary>What exactly is non-contractual churn, and why can't you just label it?</summary><div class="ans"><p>There's no subscription or cancellation event, so no one records when a customer leaves — they simply stop buying. A long gap could be a dead customer or a dormant one. So there's no ground-truth churn label to train a classifier; we infer the churn probability instead.</p></div></details>
+
+      <details><summary>Why the negative binomial and not a Poisson distribution?</summary><div class="ans"><p>A single customer's buying is Poisson, but customers have different rates. When you let the rate vary across customers with a Gamma distribution, the population's purchase counts become Negative Binomial. Real data is overdispersed (variance ≫ mean), which Poisson can't fit but NBD can.</p></div></details>
+
+      <details><summary>Difference between Pareto/NBD and BG/NBD?</summary><div class="ans"><p>Same NBD buying process. They differ in dropout: Pareto/NBD lets a customer die at any continuous time (Pareto lifetimes); BG/NBD assumes dropout only happens just after a purchase (Beta-Geometric). BG/NBD has a closed-form likelihood, so it's simpler to fit with almost the same accuracy.</p></div></details>
+
+      <details><summary>What is P(alive)?</summary><div class="ans"><p>The probability a customer is still active given their frequency, recency and age on file. It's the model's churn score — low P(alive) means likely churned. It comes out of the fitted model with no label required.</p></div></details>
+
+      <details><summary>If there are no labels, how will you evaluate the model?</summary><div class="ans"><p>Hold out a future time window. Check <em>calibration</em> — do predicted purchase counts match what actually happened? For churn framed as a task, use the held-out period to define "did they return," then measure precision/recall/AUC. For value, compare predicted vs actual CLV with MAE/RMSE.</p></div></details>
+
+      <details><summary>Then why not just use deep learning?</summary><div class="ans"><p>Deep models need labels we don't have and are hard to interpret. BTYD is interpretable and needs only RFM. Our plan uses BTYD's P(alive) as a soft label to <em>enable</em> ML, and benchmarks both — we get interpretability and flexibility rather than choosing one.</p></div></details>
+
+      <details><summary>What's your dataset?</summary><div class="ans"><p>Public non-contractual retail transaction data — primarily the <strong>UCI Online Retail II</strong> dataset (invoice-level e-commerce), plus similar transaction logs. It's the standard benchmark used across our reference papers.</p></div></details>
+
+      <details><summary>What is Gamma-Gamma for, and what does it assume?</summary><div class="ans"><p>It models the average monetary value per transaction so we can turn purchase counts into money (CLV). It assumes spend varies around a per-customer mean, those means are Gamma-distributed, and — importantly — that monetary value is independent of purchase frequency, which we verify with a correlation check.</p></div></details>
+
+      <details><summary>What are the limitations of BTYD?</summary><div class="ans"><p>It assumes Poisson purchasing, treats customers as one behavioural type, and ignores covariates (product, channel, promotions). It also can't capture individual-level trend changes — which is exactly why we add an ML benchmark layer.</p></div></details>
+
+      <details><summary>Hasn't this been done already?</summary><div class="ans"><p>BTYD and ML churn exist separately. Our contribution is the combination: using P(alive) as a soft churn label to bridge the missing-label problem, fusing probabilistic latent-churn inference with ML features in one pipeline, and prioritising retention by value (CLV), not churn risk alone.</p></div></details>
+
+      <details><summary>What does the "T" in RFM+T mean?</summary><div class="ans"><p>T is the customer's age on file — the time from their first purchase to the end of the observation window. The model needs it to know how long the customer <em>could</em> have been buying, which is essential for judging whether a silence is meaningful.</p></div></details>
+    </section>
+
+    <!-- CHEAT -->
+    <section id="cheat">
+      <p class="kicker">Last glance before you walk in</p>
+      <h2><span class="num">11</span>One-page cheat sheet</h2>
+      <div class="cheat">
+        <div class="term"><dt>Non-contractual</dt><dd>No subscription; customers buy freely. Churn is <b>latent</b> — inferred, not observed.</dd></div>
+        <div class="term"><dt>RFM + T</dt><dd><b>R</b>ecency, <b>F</b>requency, <b>M</b>onetary + customer <b>age T</b>. Model runs on <code>(x, t_x, T)</code>.</dd></div>
+        <div class="term"><dt>BTYD</dt><dd>Buy-Till-You-Die: buy at a Poisson rate <b>while alive</b>, then <b>die</b> at an unseen time.</dd></div>
+        <div class="term"><dt>NBD</dt><dd>Poisson buying + Gamma-spread of rates = <b>Negative Binomial</b> counts. Handles overdispersion.</dd></div>
+        <div class="term"><dt>Pareto/NBD</dt><dd>Death any time (Pareto lifetimes). Original; harder to fit.</dd></div>
+        <div class="term"><dt>BG/NBD</dt><dd>Death only after a purchase (Beta-Geometric). Closed-form, easy, near-equal accuracy.</dd></div>
+        <div class="term"><dt>P(alive)</dt><dd>Probability a customer is still active = the <b>churn score</b>. No label needed.</dd></div>
+        <div class="term"><dt>Gamma-Gamma</dt><dd>Models <b>spend per transaction</b>; assumes value ⟂ frequency. Feeds CLV.</dd></div>
+        <div class="term"><dt>CLV</dt><dd>Expected future transactions × value per transaction, discounted. Ranks who to save.</dd></div>
+        <div class="term"><dt>MLE / MCMC / heuristics</dt><dd>Ways to fit parameters. Model-based (MLE/MCMC) beat heuristics.</dd></div>
+        <div class="term"><dt>Zero-inflation / hurdle</dt><dd>Many customers buy 0 times → spike at zero → two-stage model (buy? then how much?).</dd></div>
+        <div class="term"><dt>The novelty</dt><dd>P(alive) as a <b>soft churn label</b> + BTYD ∪ ML + <b>value-aware</b> prioritisation.</dd></div>
+      </div>
+    </section>
+
+    <footer>
+      <p><span class="brace">{ }</span> &nbsp;Study guide for the Zeroth Review — <em>Predicting Non-Contractual Customer Churn Using Negative-Binomial (Buy-Till-You-Die) Models</em>. Concepts map one-to-one to your slides. You've got this.</p>
+    </footer>
+  </main>
+
+</div></div></div>

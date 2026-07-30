@@ -1,0 +1,12 @@
+Loading CLV datasets...
+[OnlineRetailII] 15 seeds done (44s)
+[Ta-Feng] 15 seeds done (167s)
+[Dunnhumby] 15 seeds done (25s)
+
+=== Probabilistic CLV: BTYD+GG vs deep ZILN (mean±sd over seeds, all customers) ===
+dataset          PIT-KS BTYD+GG  PIT-KS ZILN sig |   CRPS BTYD+GG   CRPS ZILN sig
+OnlineRetailII      0.212±0.01    0.031±0.01 *** |     393.0±32.5   468.3±136.2   *
+Ta-Feng             0.082±0.00    0.020±0.00 *** |   23976.2±26185.2 23389.7±25749.8   *
+Dunnhumby           0.143±0.01    0.073±0.02 *** |     270.5±10.0   275.5±11.9    
+
+[saved] C:\Users\Pranava Baascaran\Desktop\Projects\pareto-nbd-extension\results\clv_study_summary.csv

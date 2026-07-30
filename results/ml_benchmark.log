@@ -1,0 +1,17 @@
+[CDNow] N=2357 done (5s)
+[Grocery] N=1525 done (2s)
+[OnlineRetailII] N=4268 done (4s)
+[Olist] N=22597 done (13s)
+[Dunnhumby] N=2497 done (3s)
+[Ta-Feng] N=22715 done (14s)
+
+=== BTYD vs GBM — CRPS (accuracy) and PIT-KS (calibration), all customers ===
+dataset         CRPS_BTYD  CRPS_GBM PITKS_BTYD PITKS_GBM
+CDNow               0.360     0.396      0.049     0.055
+Grocery             0.501     0.555      0.061     0.059
+OnlineRetailII      0.762     0.700      0.201     0.060
+Olist               0.020     0.020      0.013     0.009
+Dunnhumby           6.855     7.221      0.177     0.228
+Ta-Feng             0.941     0.919      0.069     0.084
+
+[saved] C:\Users\Pranava Baascaran\Desktop\Projects\pareto-nbd-extension\results\ml_benchmark.csv

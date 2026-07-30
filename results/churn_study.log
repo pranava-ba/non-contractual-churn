@@ -1,0 +1,20 @@
+Loading datasets...
+[Simulated] 15 seeds done (16s)
+[CDNow] 15 seeds done (15s)
+[Grocery] 15 seeds done (12s)
+[OnlineRetailII] 15 seeds done (19s)
+[Olist] 15 seeds done (75s)
+[Dunnhumby] 15 seeds done (14s)
+[Ta-Feng] 15 seeds done (66s)
+
+=== Churn / active-customer calibration: BTYD vs ML classifier (mean over seeds) ===
+dataset          Brier BTYD  Brier ML sig |   ECE BTYD   ECE ML sig
+Simulated             0.064     0.078 *** |      0.027    0.047 ***
+CDNow                 0.149     0.154  ** |      0.073    0.054 ***
+Grocery               0.100     0.116 *** |      0.043    0.063 ***
+OnlineRetailII        0.230     0.198 *** |      0.185    0.051 ***
+Olist                 0.015     0.015  ** |      0.006    0.001 ***
+Dunnhumby             0.056     0.034 *** |      0.052    0.027 ***
+Ta-Feng               0.212     0.199 *** |      0.085    0.013 ***
+
+[saved] C:\Users\Pranava Baascaran\Desktop\Projects\pareto-nbd-extension\results\churn_study_summary.csv

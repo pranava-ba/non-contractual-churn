@@ -1,0 +1,8 @@
+[CDNow] n=2357 obs=0.0457 naive_crit=0.0280 bootstrap_crit=0.0311  (714s)
+[Grocery] n=1525 obs=0.0246 naive_crit=0.0348 bootstrap_crit=0.0338  (322s)
+
+=== Parameter-adjusted PIT-KS null (MLE plug-in) ===
+  CDNow: observed 0.0457 vs naive 0.0280 vs bootstrap 0.0311 -> still detectable
+  Grocery: observed 0.0246 vs naive 0.0348 vs bootstrap 0.0338 -> NOT significant once the estimated-parameter correction is applied
+
+[saved] C:\Users\Pranava Baascaran\Desktop\Projects\pareto-nbd-extension\results\pit_bootstrap.csv

@@ -1,0 +1,16 @@
+Loading...
+[Sim-k1] 12 seeds done (182s)
+[Sim-k2] 12 seeds done (134s)
+[Sim-k3] 12 seeds done (132s)
+[CDNow] 12 seeds done (450s)
+[Grocery] 12 seeds done (240s)
+
+=== Next-purchase timing: Pareto/NBD vs Pareto/GGG (mean over seeds) ===
+dataset       timing CRPS PNBD      GGG sig |   MdAE PNBD     GGG sig
+Sim-k1                   27.11    27.46     |        6.03    6.26    
+Sim-k2                   25.29    24.68   * |        5.33    4.39 ***
+Sim-k3                   21.96    21.11     |        4.49    3.23 ***
+CDNow                    53.39    53.27     |      107.08  107.36    
+Grocery                  22.65    26.33 *** |        3.89    2.98 ***
+
+[saved] C:\Users\Pranava Baascaran\Desktop\Projects\pareto-nbd-extension\results\timing_study_summary.csv
