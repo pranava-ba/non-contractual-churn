@@ -10,6 +10,8 @@ This repository provides a complete Python framework for probabilistic evaluatio
    :caption: Contents:
 
    installation
+   ARCHITECTURE
+   DEVELOPMENT
    theory_variance_decomposition
    api_reference
 

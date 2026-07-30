@@ -47,3 +47,22 @@ def test_clv_extension():
     scores = score_clv_forecast(pred_clv, true_clv, rng)
     assert "clv_CRPS" in scores
     assert "clv_cov95" in scores
+
+
+def test_clv_posterior_spend_is_realistic():
+    """The posterior mean spend must track observed spend (Inverse-Gamma posterior),
+    not its reciprocal. Guards against sampling the mean from a Gamma, which returns
+    values ~1/spend -- off by orders of magnitude and anti-correlated with the data."""
+    x = np.array([2.0, 5.0, 3.0, 10.0, 6.0])
+    m_obs = np.array([15.0, 25.0, 10.0, 50.0, 30.0])
+    fit = fit_gamma_gamma(x, m_obs)
+
+    nu = sample_posterior_nu(x, m_obs, fit["p"], fit["q"], fit["v"], n_draws=4000, seed=7)
+    post_mean = nu.mean(axis=0)
+
+    # every customer's posterior mean spend lies in a realistic band around the data
+    assert np.all(post_mean > 5.0) and np.all(post_mean < 80.0)
+    # shrinkage preserves ranking: the biggest spender has the biggest posterior mean
+    assert np.argmax(post_mean) == np.argmax(m_obs)
+    # positive correlation with observed spend (a reciprocal bug makes this negative)
+    assert np.corrcoef(post_mean, m_obs)[0, 1] > 0.9

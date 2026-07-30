@@ -22,7 +22,18 @@ This repository evaluates continuous-time Buy-Till-You-Die (BTYD) forecasts usin
   - `src/timing.py` *(Extension B)*: Posterior-predictive wait-time distributions ($t_{x+1}$) for active customers.
   - `src/clv.py` *(Extension E)*: Gamma-Gamma spend process combined with purchase-count forecasts for probabilistic CLV.
 - **Interactive WebAssembly Dashboard**:
-  - `docs/interactive.html`: Standalone, dark-mode Pyodide WebAssembly single-page web app running live MCMC/MLE simulations in the browser.
+  - `docs/interactive.html`: No-server-required, dark-mode Pyodide WebAssembly single-page web app running live MCMC/MLE simulations in the browser (loads Pyodide, Chart.js and fonts from CDNs, so it needs a network connection).
+
+---
+
+## 📖 Documentation Directory
+
+- 📐 [Technical Architecture](docs/ARCHITECTURE.md): Deep dive into the probabilistic model math, the Abe MCMC and Pareto/GGG samplers, the SPP predictive identity, the proper-scoring evaluation framework, pipeline data flow, and data schemas.
+- 💻 [Developer Guide](docs/DEVELOPMENT.md): Workspace setup, running the study, building the Springer Nature paper, `pytest`, linting rules (`black`/`flake8`), and reproducibility conventions.
+- 🤝 [Contributing Guidelines](CONTRIBUTING.md): PR workflow, Conventional Commit requirements, issue reporting, and the numerical-test standard for new estimators and scorers.
+- 🗺️ [Project Timeline & Roadmap](TIMELINE.md): Milestone progression, release history, and the feature roadmap (model/ML benchmark, heterogeneous-`k` Pareto/GGG, covariates).
+- 📜 [Changelog](CHANGELOG.md): Formal release logs adhering to Keep a Changelog.
+- 🔒 [Security Policy](SECURITY.md): Dependency safety, safe-execution notes, and responsible disclosure.
 
 ---
 
@@ -88,7 +99,7 @@ python src/empirical.py
 
 ## Analytical Variance Decomposition
 
-The paper proves why MCMC and MLE produce statistically equivalent forecast distributions via the law of total variance:
+The paper shows why MCMC and MLE produce statistically equivalent forecast distributions via a law-of-total-variance scaling argument:
 
 $$\mathrm{Var}(x^*_i \mid \text{data}) = \mathbb{E}_{\theta \mid \text{data}}\!\left[\mathrm{Var}(x^*_i \mid \theta, \text{data})\right] + \mathrm{Var}_{\theta \mid \text{data}}\!\left(\mathbb{E}[x^*_i \mid \theta, \text{data}]\right)$$
 

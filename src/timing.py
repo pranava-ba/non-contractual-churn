@@ -73,12 +73,13 @@ def score_timing_forecast(pred_wait, true_wait):
     # Filter finite predictions
     valid_mask = np.isfinite(true_wait)
     if not valid_mask.any():
-        return {"timing_nAE": np.nan, "timing_MdAE": np.nan, "timing_CRPS": np.nan}
+        return {"timing_MAE": np.nan, "timing_MdAE": np.nan, "timing_CRPS": np.nan}
     
     pw = pred_wait[:, valid_mask]
     tw = true_wait[valid_mask]
     
-    # Cap infinite predictions at 10x max true wait for numerical stability
+    # Cap infinite predictions (customer forecast to churn before buying) at 5x the
+    # largest observed wait for numerical stability
     cap = max(tw.max() * 5.0, 100.0)
     pw_capped = np.where(np.isfinite(pw), pw, cap)
     

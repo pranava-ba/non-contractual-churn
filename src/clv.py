@@ -7,9 +7,12 @@ future customer value (CLV) over forecast horizon T*.
 
 Model:
   - Customer i's transaction values m_{i,j} ~ Gamma(p, p / nu_i) with mean nu_i.
-  - Heterogeneity in mean spend: nu_i ~ Gamma(q, v).
-  - Given observed average spend bar{m}_i across x_i repeat transactions,
-    the posterior distribution of nu_i is Gamma(p*x_i + q, p*x_i*bar{m}_i + v).
+  - Heterogeneity in mean spend: nu_i ~ Inverse-Gamma(q, v), so E[nu_i] = v/(q-1).
+  - Given observed average spend bar{m}_i across x_i repeat transactions, the
+    posterior of the mean spend is nu_i ~ Inverse-Gamma(p*x_i + q, v + p*x_i*bar{m}_i),
+    with posterior mean (v + p*x_i*bar{m}_i)/(p*x_i + q - 1) -- a data/prior weighted
+    average (Fader, Hardie & Lee 2005). Note nu_i is the MEAN spend, so its posterior is
+    Inverse-Gamma (not Gamma); sampling a Gamma here would invert the scale.
 
 Calculates probabilistic CLV CRPS, coverage, and sharpness.
 """
@@ -45,16 +48,21 @@ def fit_gamma_gamma(x, m_obs):
 
 def sample_posterior_nu(x, m_obs, p, q, v, n_draws=500, seed=0):
     """Draw posterior mean transaction value nu_i per customer.
-    
-    Returns: (n_draws, N) matrix of drawn transaction averages nu_i."""
+
+    The mean spend nu_i has an Inverse-Gamma posterior, Inverse-Gamma(shape, scale)
+    with shape = p*x_i + q and scale = v + p*x_i*bar{m}_i (customers with x_i=0 fall
+    back to the prior Inverse-Gamma(q, v)). We sample it as the reciprocal of a
+    Gamma(shape, rate=scale) draw, so E[nu_i] = scale/(shape-1) tracks observed spend.
+
+    Returns: (n_draws, N) matrix of drawn mean transaction values nu_i."""
     rng = np.random.default_rng(seed)
     N = len(x)
     shape = np.where(x > 0, p * x + q, q)
-    rate = np.where(x > 0, p * x * m_obs + v, v)
-    
-    # Gamma(shape, rate) draws
-    nu_draws = rng.gamma(shape=shape[None, :], scale=1.0 / rate[None, :], size=(n_draws, N))
-    return nu_draws
+    scale = np.where(x > 0, p * x * m_obs + v, v)   # Inverse-Gamma scale parameter
+
+    # nu ~ Inverse-Gamma(shape, scale): draw g ~ Gamma(shape, rate=scale), nu = 1/g
+    g = rng.gamma(shape=shape[None, :], scale=1.0 / scale[None, :], size=(n_draws, N))
+    return 1.0 / g
 
 
 def predict_clv_distribution(pred_x_star, nu_draws, discount_rate=0.0):
