@@ -75,6 +75,7 @@ def simulate_dataset_ggg(params: DatasetParams, k: float,
         for h in horizons:
             fut = path[(path > cal_len) & (path <= cal_len + h)]
             row[f"x_star_{h}"] = int(fut.size)
+            row[f"t_next_{h}"] = float(fut.min() - cal_len) if fut.size else np.inf
         rows.append(row)
     df = pd.DataFrame(rows)
     df.attrs["params"] = {**params.as_dict(), "regularity_k": k}
@@ -132,6 +133,7 @@ def simulate_dataset_mixture(N, T, E_lambda, ratio, E_mu, CV_mu,
         for h in horizons:
             fut = path[(path > cal_len) & (path <= cal_len + h)]
             row[f"x_star_{h}"] = int(fut.size)
+            row[f"t_next_{h}"] = float(fut.min() - cal_len) if fut.size else np.inf
         rows.append(row)
     df = pd.DataFrame(rows)
     df.attrs["params"] = dict(N=N, T=T, E_lambda=E_lambda, ratio=ratio,

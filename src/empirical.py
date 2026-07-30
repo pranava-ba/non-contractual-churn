@@ -67,8 +67,17 @@ def elog_to_summary(elog: pd.DataFrame, cal_weeks: int, horizon: int) -> pd.Data
         x = len(cal_rep)
         t_x = (cal_rep[-1] - acq) / WEEK if x > 0 else 0.0
         T_cal = (cal_end - acq) / WEEK
-        rows.append({"cust": cust, "x": x, "t_x": float(t_x),
-                     "T_cal": float(T_cal), f"x_star_{horizon}": len(fut_rep)})
+        t_next = float((fut_rep[0] - cal_end) / WEEK) if len(fut_rep) else np.inf
+        # litt = sum of log inter-purchase gaps (weeks) from acquisition through the calibration
+        # repeat purchases -- the sufficient statistic that identifies the Pareto/GGG regularity k.
+        if x > 0:
+            gaps = np.diff(np.concatenate([[acq], cal_rep])) / WEEK
+            litt = float(np.log(gaps[gaps > 0]).sum())
+        else:
+            litt = 0.0
+        rows.append({"cust": cust, "x": x, "t_x": float(t_x), "litt": litt,
+                     "T_cal": float(T_cal), f"x_star_{horizon}": len(fut_rep),
+                     f"t_next_{horizon}": t_next})
     return pd.DataFrame(rows)
 
 

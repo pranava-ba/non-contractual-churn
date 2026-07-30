@@ -156,6 +156,9 @@ def simulate_dataset(
         for h in horizons:
             future = path[(path > cal_len) & (path <= cal_len + h)]
             row[f"x_star_{h}"] = int(future.size)
+            # wait time to the next purchase after calibration (inf if none in window) -
+            # the ground truth for the timing forecast (Extension B). Read-only, no rng.
+            row[f"t_next_{h}"] = float(future.min() - cal_len) if future.size else np.inf
         rows.append(row)
 
     df = pd.DataFrame(rows)
