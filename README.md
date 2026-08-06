@@ -13,7 +13,7 @@
 
 </div>
 
-Official implementation and extensions for **"Non-contractual churn with MCMC: are Pareto/NBD purchase forecasts calibrated?"** (Pranava BA & Vyasa R Rajesawaran).
+Implementation and extensions for **"Non-contractual churn with MCMC: are Pareto/NBD purchase forecasts calibrated?"** (Pranava BA & Vyasa R Rajesawaran).
 
 This repository evaluates continuous-time Buy-Till-You-Die (BTYD) forecasts using **proper scoring rules (CRPS, Log Score)**, **randomized PIT diagnostics**, and **TOST equivalence tests**. It includes implementations for **Pareto/NBD**, **Pareto/GGG** (Gamma renewal regularity), **Purchase Timing ($t_{x+1}$)** forecasting, and **Gamma-Gamma Probabilistic Customer Lifetime Value (CLV)**.
 
@@ -27,7 +27,7 @@ It then runs a second, larger study — **statistical vs. machine-learned** — 
 
 | Area | Module(s) | What it does |
 |---|---|---|
-| Parameter estimation | `estimate.py`, `estimate_ggg.py` | Abe (2009) MCMC Gibbs sampler + robust multi-start MLE; common-$k$ Pareto/GGG sampler for inter-purchase regularity |
+| Parameter estimation | `estimate.py`, `estimate_ggg.py` | Abe (2009) MCMC Gibbs sampler + robust multi-start MLE; common- $k$ Pareto/GGG sampler for inter-purchase regularity |
 | Probabilistic scoring | `score.py` | Sample-based CRPS, discrete log score, Czado et al. (2009) randomized PIT, coverage, sharpness |
 | Timing *(Ext. B)* | `timing.py` | Posterior-predictive next-purchase wait-time distribution $t_{x+1}$ for active customers |
 | Probabilistic CLV *(Ext. E)* | `clv.py` | Gamma-Gamma spend process combined with purchase-count forecasts |
