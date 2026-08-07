@@ -13,7 +13,7 @@
 
 </div>
 
-Implementation and extensions for **"Non-contractual churn with MCMC: are Pareto/NBD purchase forecasts calibrated?"** (Pranava BA & Vyasa R Rajesawaran).
+Implementation and extensions for **"Non-contractual churn with MCMC: are Pareto/NBD purchase forecasts calibrated?"** (Pranava BA & Vyasa R Rajeswaran).
 
 This repository evaluates continuous-time Buy-Till-You-Die (BTYD) forecasts using **proper scoring rules (CRPS, Log Score)**, **randomized PIT diagnostics**, and **TOST equivalence tests**. It includes implementations for **Pareto/NBD**, **Pareto/GGG** (Gamma renewal regularity), **Purchase Timing ($t_{x+1}$)** forecasting, and **Gamma-Gamma Probabilistic Customer Lifetime Value (CLV)**.
 
