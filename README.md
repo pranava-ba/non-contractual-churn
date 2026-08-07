@@ -112,6 +112,6 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 <div align="center">
 
-Built with ❤️ by **Pranava BA** & **Vyasa R Rajesawaran** · Department of CSE (AI & ML), Easwari Engineering College.
+Built with ❤️ by **Pranava BA** & **Vyasa R Rajeswaran** · Department of CSE (AI & ML), Easwari Engineering College.
 
 </div>
