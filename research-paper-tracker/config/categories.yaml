@@ -1,0 +1,96 @@
+# NON-CONTRACTUAL CHURN literature tracker.
+#
+# All categories are open keyword searches across every venue (journals + SSRN +
+# preprints), floored at 2023 (settings.yaml: min_publication_date). Each REQUIRES
+# a non-contractual signal (the phrase "non-contractual", a buy-till-you-die /
+# Pareto-NBD / BG-NBD model, latent attrition, RFM customer-base analysis, ...) so
+# the list isn't drowned by generic contractual churn (telecom / SaaS / insurance).
+#
+# require_all = list of GROUPS; a paper must match >=1 term from EVERY group.
+# Term matching is case-insensitive; space / hyphen / slash are interchangeable, so
+# "pareto/nbd" also matches "Pareto NBD" and "Pareto-NBD".
+#
+# exclude = hard off-topic keyword false positives (rejected outright). The `&offtopic`
+# YAML anchor below is reused by every category. These are terms that never occur in a
+# genuine CLV/BTYD paper (remote-sensing "RFM", quantum codes, credit scoring, ...).
+#
+# TWO-STAGE DESIGN. The keyword filter here is tuned for RECALL (catch everything on
+# topic). Finer, title-aware PRECISION curation — dropping generic RFM+clustering
+# *segmentation* papers and contractual telecom/subscription/OTT churn that leak
+# through — is done after each refresh by `python tools/curate.py` (it hides them,
+# writes data/out/removed_papers.csv, and reports funnel counts). Don't try to encode
+# that logic as blunt keyword excludes here: an exclude on "telecom"/"segmentation"
+# would also drop good methodology papers that merely benchmark on such data.
+
+categories:
+  # 1 -------------------------------------------------------------------------
+  - key: non_contractual_churn
+    label: "Non-Contractual Churn"
+    important: true
+    rank_by: relevance
+    top_n: 150
+    feeds:
+      - {source: openalex, mode: keyword, query: "non-contractual churn customer attrition retention lifetime"}
+      - {source: crossref, mode: keyword, query: "non-contractual churn customer attrition retention lifetime"}
+    require_all:
+      - ["non-contractual", noncontractual, "non-subscription", "buy till you die",
+         "buy-till-you-die", btyd, "pareto/nbd", "bg/nbd", "mbg/nbd", "bg/bb",
+         "latent attrition", "always a share", "customer-base analysis", "customer base analysis"]
+      - [churn, attrition, defection, retention, customer, "customer lifetime",
+         clv, cltv, "repeat purchase", "purchase behavior", "purchasing behaviour"]
+    exclude: &offtopic
+      ["remote sensing", "road extraction", "u-net", unet, mamba, quantum,
+       "self-orthogonal", "lcd code", "quantum code", "credit scoring", "credit score",
+       "electricity customer demand", "image segmentation", "network intrusion"]
+
+  # 2 -------------------------------------------------------------------------
+  - key: btyd_models
+    label: "Buy-Till-You-Die Models (BG/NBD, Pareto/NBD)"
+    rank_by: relevance
+    top_n: 120
+    feeds:
+      - {source: openalex, mode: keyword, query: "buy till you die Pareto/NBD BG/NBD Gamma-Gamma customer purchase model"}
+      - {source: crossref, mode: keyword, query: "buy till you die Pareto NBD BG NBD Gamma-Gamma customer purchase"}
+    require_all:
+      # Only unambiguous model names — "gamma-gamma" / "beta-geometric" alone pull in
+      # physics/optics/stats papers; genuine Gamma-Gamma CLV work lands in CLV & RFM.
+      - ["buy till you die", "buy-till-you-die", btyd, "pareto/nbd", "bg/nbd",
+         "mbg/nbd", "bg/bb", "latent attrition", "conditional expected transactions"]
+    exclude: *offtopic
+
+  # 3 -------------------------------------------------------------------------
+  - key: clv_rfm
+    label: "CLV & RFM in Non-Contractual Settings"
+    rank_by: relevance
+    top_n: 120
+    feeds:
+      - {source: openalex, mode: keyword, query: "customer lifetime value RFM recency frequency monetary non-contractual customer base"}
+      - {source: crossref, mode: keyword, query: "customer lifetime value RFM recency frequency non-contractual customer base"}
+    require_all:
+      - [clv, cltv, "customer lifetime value", "customer equity", "lifetime value",
+         rfm, "recency frequency", "recency, frequency", "customer-base analysis", "customer base analysis"]
+      # NOTE: bare "rfm" removed from this group — it also sits in group 1, so with it
+      # here ANY RFM paper satisfied both groups, which is what flooded the category
+      # with generic RFM+clustering segmentation. A clv_rfm paper must now carry a real
+      # non-contractual / BTYD / transactional signal, not merely mention RFM.
+      - ["non-contractual", noncontractual, "non-subscription", "buy till you die",
+         btyd, "pareto/nbd", "bg/nbd", "mbg/nbd", "latent attrition",
+         "repeat purchase", "purchase frequency", "transaction log", "customer-base analysis"]
+    exclude: *offtopic
+
+  # 4 -------------------------------------------------------------------------
+  - key: ml_noncontractual_churn
+    label: "ML / Deep Learning for Non-Contractual Churn"
+    rank_by: relevance
+    top_n: 120
+    feeds:
+      - {source: openalex, mode: keyword, query: "machine learning deep learning non-contractual customer churn prediction lifetime value"}
+      - {source: crossref, mode: keyword, query: "machine learning deep learning non-contractual customer churn lifetime value"}
+    require_all:
+      - ["machine learning", "deep learning", "neural network", "gradient boosting",
+         xgboost, "random forest", "survival analysis", ensemble, "predictive model*",
+         classifier, "data-driven", boosting]
+      - ["non-contractual", noncontractual, "non-subscription", "buy till you die",
+         btyd, "pareto/nbd", "bg/nbd", "mbg/nbd", "latent attrition",
+         "customer lifetime value", clv, cltv, "customer-base analysis"]
+    exclude: *offtopic

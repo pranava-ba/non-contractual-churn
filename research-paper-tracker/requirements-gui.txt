@@ -1,0 +1,7 @@
+# GUI (Phase 2). Install on top of requirements.txt.
+PyQt6>=6.6
+PyQt6-WebEngine>=6.6
+# Sci-Hub download fallback (auto-discovers mirrors):
+scidownl>=1.0
+# packaging to .exe:
+pyinstaller>=6.0

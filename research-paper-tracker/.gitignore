@@ -1,0 +1,16 @@
+# --- research-paper-tracker: version the tool, not its generated/local data ---
+# Regenerate locally: `python -m src.run` (the DB) and
+# `python tools/curate.py` (the CSVs under data/out/).
+__pycache__/
+*.pyc
+
+# SQLite source-of-truth DB + its timestamped backups (local state).
+data/tracker.db
+data/tracker.db.bak-*
+
+# Fetched PDFs and regenerable CSV exports.
+data/downloads/
+data/out/
+
+# Local editor / permission state.
+.claude/

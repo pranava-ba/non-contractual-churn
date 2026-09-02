@@ -1,0 +1,80 @@
+Abstract
+This study is the first generalised effort to compare the forecasting efficacy of dif-
+ferent Pareto/NBD model-based forecasts. Monte Carlo Markov Chain (MCMC)-
+based estimates, Maximum Likelihood Estimation (MLE), and heuristics are applied
+to four different types of forecasts: (1) predicting the future number of purchases a
+single customer makes within a given period, (2) identifying active customers who
+will make at least one purchase within a given period, (3) identifying the customers
+who will belong to the top segments of the customer base, and (4) predicting the
+timing of a customer’s next purchase. The results show that the model-based fore-
+casts outperform the heuristics regarding predictive power and accuracy for the first
+three types of forecasts. MCMC yields slightly better results than MLE and it can
+additionally convince with confidence intervals for the number of future purchases.
+Forecasting the timing of a customer’s next purchase yields deviations that are too
+large to be used in practice.
+
+other than these 4 forecasts, should we try to add something else, is it necessary to do so, or are these comprehensive by themselves?
+
+"The results show that the model-based fore-
+casts outperform the heuristics regarding predictive power and accuracy for the first
+three types of forecasts"
+
+"MCMC yields slightly better results than MLE and it can
+additionally convince with confidence intervals for the number of future purchases"
+
+"Forecasting the timing of a customer’s next purchase yields deviations that are too
+large to be used in practice." why is it too large to be used in practice?
+
+"These models assume that a customer continues buy-
+ing until an unobserved dropout occurs at which the customer becomes permanently
+inactive." 
+
+"The purchase process of a BTYD model describes the purchase pattern of
+a customer, whereas the dropout process defines the distribution of the dropout time."
+
+"Today’s system capacities enable a low threshold use of model extensions such as the considera-
+tion of both static and time-variant covariates"
+
+"In general, well-fitting
+parametric models can play to their strength of coping well with parsimonious data
+sets due to their pre-defined structure, whereas ML algorithms can recognise pat-
+terns and trends that are not captured by parametric models"
+
+"As both Valendin et al. (2022) and Xie (2020) pointed out, ML routines cause signif-
+icantly more computational cost than parametric models"
+
+"Notably, applying boot-
+strapping to MLE models involves substantially lower computational and memory
+requirements than in ML. This is primarily because bootstrapped ML approaches
+require retraining full models for each resample, whereas in parametric settings,
+only parameter re-estimation is necessary"
+
+"Thinking of the likelihood as an unnormalised probability distribution, Maxi-
+mum Likelihood calculates its mode, i.e., the parameter value(s) yielding the highest
+likelihood value"
+
+"Simon and Adler (2022) have shown that the
+parameter recovery as well as the individual customers’ purchase forecast improves
+significantly when using the median draw of Abe’s (2009) MCMC algorithm rather
+than MLE, particularly in the context of small sample data sets"
+
+"As the duration of the customer relationship with a company is not observable in
+a non-contractual setting, P(alive) is difficult to assess for real data sets and hence
+infeasible for model comparison"
+
+"The first of these objectives is mainly driven by the concept of
+customer lifetime value (CLV), which is given by the expected (discounted) future
+cash flows from the customer relationship (Gupta et al. 2006) and can be based on
+the parameter estimates from the Pareto/NBD model (Glady et al. 2009; Abe 2009;
+Bachmann et al. 2021)."
+
+"In the literature to date, the future number of purchases has been used more as a
+means to an end in order to compare the goodness-of-fit of different models based
+on a handful of empirical data sets (Fader et al. 2005a; Bachmann et al. 2021; Bem-
+maor and Glady 2012; Platzer 2021b; Valendin et al. 2022). Simon and Adler (2022)
+reported point estimates for the deviations measures in their simulation study, but
+their contribution neither contains empirical validation nor confidence intervals.
+Still, the magnitude of the expected deviation is of major interest for practitioners
+but has not yet been subject of research."
+
+explain each part in quotes in detail one by one. 

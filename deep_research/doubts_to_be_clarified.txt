@@ -1,0 +1,9 @@
+in the fader deep dive md, why is it said that pareto/nbd is hard to implement?
+why is it a difficult likelihood?
+what are gauss hypergeometric functions?
+what is a closed form expression?
+
+"Thesis. The Pareto/NBD is powerful but hard to implement (a difficult likelihood, Gauss hypergeometric functions). Swap its continuous exponential lifetime for a beta-geometric dropout that fires after each purchase, and you get the BG/NBD — near-identical predictive performance with closed-form expressions simple enough to estimate in a spreadsheet.
+"
+
+explain in detail. 

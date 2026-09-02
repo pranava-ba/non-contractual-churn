@@ -1,0 +1,66 @@
+# Global settings for the research paper tracker.
+
+# Used for the OpenAlex "polite pool" (faster, more reliable) and any future email.
+contact_email: pranavabaascaran@gmail.com
+
+# Refresh cadence (manual). The GUI shows "due today / overdue by N days" based on
+# this interval and the last refresh recorded in the DB.
+refresh_interval_days: 7
+
+# Window: for the FIRST ever refresh, look back this many days. Afterwards the
+# window auto-covers everything since the last refresh (so a late/overdue refresh
+# never misses papers), plus a small margin for publication-date lag, capped at
+# max_lookback_days. Dedup means overlap never produces repeats.
+lookback_days: 7
+lag_margin_days: 2
+max_lookback_days: 60
+
+# Default cap on papers surfaced per category per run (categories can override).
+default_top_n: 15
+
+# Output / storage locations (relative to project root).
+db_path: data/tracker.db
+output_dir: data/out
+download_dir: data/downloads   # where downloaded PDFs are saved
+
+# Full-text download: arXiv + open-access links are used first (legal). For
+# paywalled DOIs it falls back to Sci-Hub (via the `scidownl` engine, which
+# auto-discovers a working mirror; the list below is only tried as a hint).
+# Access to Sci-Hub may be legally restricted in your jurisdiction; use at your
+# own discretion. Set scihub_mirrors to [] to disable the Sci-Hub fallback.
+scihub_mirrors:
+  - https://sci-hub.se
+  - https://sci-hub.st
+  - https://sci-hub.ru
+
+# Many ISPs (e.g. in India) block Sci-Hub at the network level, so downloads fail
+# with a connection error no matter the mirror. Route around it with a proxy —
+# a running VPN's SOCKS/HTTP proxy, Tor ("socks5h://127.0.0.1:9150"), etc.
+# Empty = no proxy (direct). Applies to all downloads.
+proxy: ""
+
+# --- API tuning ---
+openalex_per_page: 200        # max 200
+openalex_max_pages: 4         # safety cap for broad keyword queries
+arxiv_page_size: 100
+arxiv_max_pages: 6
+request_timeout: 30
+
+# Polite delays between requests (seconds).
+openalex_delay: 0.2
+arxiv_delay: 3.0              # arXiv asks callers to wait ~3s between requests
+
+# Diversity: cap how many papers from one venue may fill a category's top-N, so
+# a high-volume journal (e.g. Entropy) can't crowd out other journals and arXiv
+# preprints. All of arXiv counts as one venue. Categories can override; if there
+# aren't enough other venues to fill top-N, the cap relaxes. Set high to disable.
+max_per_venue: 6
+
+# Drop preprint-repository hits (Zenodo, Research Square, SSRN, ...) from the
+# keyword categories. Real preprints still come through the arXiv feed. Set to
+# false to include them (raises recall, lowers precision).
+keyword_exclude_repositories: true
+
+# Ranking: tier assigned to sources not in the curated journal list.
+arxiv_tier: 4                 # preprints rank mid
+unknown_venue_tier: 9        # keyword hits from unlisted journals rank last on ties

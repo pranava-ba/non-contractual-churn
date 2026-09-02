@@ -1,0 +1,39 @@
+# Curated "top journals" grouped by area, for the non-contractual churn / BTYD /
+# CLV literature. These lists no longer drive a "journals" feed — the four churn
+# categories all use keyword search across ALL venues (see categories.yaml). They
+# now only supply a journal **tier** used to break ranking ties, and flag broad
+# mega-journals that should pass a topical sieve.
+#
+# (The tracker was repurposed from an earlier finance / information-theory tracker;
+# the original venue lists are preserved under config/_finance_backup/journals.yaml.)
+#
+# tier: 1 = flagship, 2 = strong, 3 = specialized / megajournal. Used only for ties.
+# issn: any one ISSN for the journal (OpenAlex matches the journal's full ISSN set).
+# sieve: true -> broad venue; kept only if the paper clears a category's sieve_terms.
+# Add or remove venues freely — one line each.
+
+areas:
+  marketing:
+    - {name: "Marketing Science",                             issn: "0732-2399", tier: 1}
+    - {name: "Journal of Marketing Research",                 issn: "0022-2437", tier: 1}
+    - {name: "Journal of Marketing",                          issn: "0022-2429", tier: 1}
+    - {name: "International Journal of Research in Marketing", issn: "0167-8116", tier: 1}   # Valendin et al. (2022)
+    - {name: "Quantitative Marketing and Economics",          issn: "1570-7156", tier: 2}
+    - {name: "Journal of the Academy of Marketing Science",   issn: "0092-0703", tier: 2}
+    - {name: "Journal of Retailing",                          issn: "0022-4359", tier: 2}
+    - {name: "Journal of Interactive Marketing",              issn: "1094-9968", tier: 2}
+    - {name: "Marketing Letters",                             issn: "0923-0645", tier: 3}
+
+  analytics_or:
+    - {name: "European Journal of Operational Research",      issn: "0377-2217", tier: 1}   # Buckinx & Van den Poel (2005)
+    - {name: "Journal of Service Research",                   issn: "1094-6705", tier: 2}   # Gupta et al. (2006)
+    - {name: "Decision Support Systems",                      issn: "0167-9236", tier: 2}   # De Caigny et al. (2024)
+    - {name: "Expert Systems with Applications",              issn: "0957-4174", tier: 2}   # Miguéis et al. (2012)
+    - {name: "Journal of Business Economics",                 issn: "0044-2372", tier: 2}   # Simon (2025) — source venue
+    - {name: "Journal of Business Research",                  issn: "0148-2963", tier: 2}
+
+  ml_data_science:
+    - {name: "Data Mining and Knowledge Discovery",          issn: "1384-5810", tier: 2}
+    - {name: "Machine Learning and Knowledge Extraction",    issn: "2504-4990", tier: 3}   # Imani et al. (2025)
+    - {name: "IEEE Access",                                  issn: "2169-3536", tier: 3, sieve: true}   # Manzoor et al. (2024); broad megajournal
+    - {name: "Scientific Reports",                           issn: "2045-2322", tier: 3, sieve: true}   # broad megajournal

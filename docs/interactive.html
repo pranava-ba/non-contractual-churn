@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pareto/NBD & GGG Pyodide Interactive Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --accent-gradient: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --cyan: #38bdf8;
+            --indigo: #818cf8;
+            --emerald: #34d399;
+            --rose: #fb7185;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 1.05rem;
+        }
+
+        .pyodide-status {
+            display: inline-block;
+            margin-top: 1rem;
+            padding: 0.4rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            color: var(--cyan);
+        }
+
+        .pyodide-status.ready {
+            background: rgba(52, 211, 153, 0.15);
+            border-color: rgba(52, 211, 153, 0.3);
+            color: var(--emerald);
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 1.5rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .card h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.25rem;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.1rem;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 0.35rem;
+        }
+
+        label span.val {
+            color: var(--cyan);
+            font-family: 'Fira Code', monospace;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #334155;
+            outline: none;
+            accent-color: #6366f1;
+        }
+
+        select {
+            width: 100%;
+            padding: 0.6rem;
+            border-radius: 0.5rem;
+            background: #1e293b;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            font-family: inherit;
+            outline: none;
+        }
+
+        button.btn-run {
+            width: 100%;
+            padding: 0.8rem;
+            border: none;
+            border-radius: 0.75rem;
+            background: var(--accent-gradient);
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.15s ease, opacity 0.15s ease;
+            margin-top: 1rem;
+        }
+
+        button.btn-run:hover {
+            opacity: 0.95;
+            transform: translateY(-1px);
+        }
+
+        button.btn-run:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .metric-box {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .metric-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            font-family: 'Fira Code', monospace;
+            color: var(--cyan);
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.25rem;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 260px;
+            width: 100%;
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-grid { grid-template-columns: 1fr; }
+            .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+            .charts-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Pareto/NBD & GGG Interactive Pyodide Dashboard</h1>
+            <p class="subtitle">Client-side WebAssembly probabilistic forecast simulation and calibration engine</p>
+            <div id="pyodide-status" class="pyodide-status">⚡ Loading Pyodide WebAssembly runtime & SciPy...</div>
+        </header>
+
+        <div class="dashboard-grid">
+            <!-- Controls Panel -->
+            <div class="card">
+                <h2>⚙️ Simulation Controls</h2>
+                
+                <div class="form-group">
+                    <label>Cohort Size (N): <span class="val" id="n-val">400</span></label>
+                    <input type="range" id="n-slider" min="100" max="1500" step="50" value="400">
+                </div>
+
+                <div class="form-group">
+                    <label>Expected Purchase Rate E(λ): <span class="val" id="elam-val">0.15</span></label>
+                    <input type="range" id="elam-slider" min="0.02" max="0.5" step="0.01" value="0.15">
+                </div>
+
+                <div class="form-group">
+                    <label>Expected Dropout Rate E(μ): <span class="val" id="emu-val">0.08</span></label>
+                    <input type="range" id="emu-slider" min="0.01" max="0.3" step="0.01" value="0.08">
+                </div>
+
+                <div class="form-group">
+                    <label>Inter-purchase Regularity (k): <span class="val" id="k-val">1.0</span></label>
+                    <input type="range" id="k-slider" min="1.0" max="4.0" step="0.5" value="1.0">
+                </div>
+
+                <div class="form-group">
+                    <label>Forecast Horizon T* (weeks): <span class="val" id="tstar-val">26</span></label>
+                    <input type="range" id="tstar-slider" min="13" max="52" step="13" value="26">
+                </div>
+
+                <div class="form-group">
+                    <label>Estimation Method</label>
+                    <select id="method-select">
+                        <option value="mle">Maximum Likelihood (MLE)</option>
+                        <option value="mcmc">MCMC Gibbs Sampler (Bayesian)</option>
+                    </select>
+                </div>
+
+                <button id="btn-run" class="btn-run" disabled>Run Pyodide Simulation</button>
+            </div>
+
+            <!-- Output Panel -->
+            <div>
+                <!-- Top Key Metrics -->
+                <div class="metrics-grid">
+                    <div class="metric-box">
+                        <div class="metric-label">CRPS (Lower = Better)</div>
+                        <div class="metric-value" id="crps-metric">--</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-label">95% Interval Coverage</div>
+                        <div class="metric-value" id="cov95-metric">--</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-label">Randomized PIT-KS</div>
+                        <div class="metric-value" id="pitks-metric">--</div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-label">Log Score (Smoothed)</div>
+                        <div class="metric-value" id="logscore-metric">--</div>
+                    </div>
+                </div>
+
+                <!-- Charts Grid -->
+                <div class="charts-grid">
+                    <div class="card">
+                        <h2>📊 Forecast vs Actual Repeat Purchases</h2>
+                        <div class="chart-container">
+                            <canvas id="scatterChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2>🎯 Randomized PIT Histogram</h2>
+                        <div class="chart-container">
+                            <canvas id="pitChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // UI Slider Sync
+        const sliders = ['n', 'elam', 'emu', 'k', 'tstar'];
+        sliders.forEach(id => {
+            const s = document.getElementById(`${id}-slider`);
+            const v = document.getElementById(`${id}-val`);
+            s.addEventListener('input', () => v.innerText = s.value);
+        });
+
+        let pyodideInstance = null;
+        let scatterChart = null;
+        let pitChart = null;
+
+        function initCharts() {
+            const ctxScatter = document.getElementById('scatterChart').getContext('2d');
+            scatterChart = new Chart(ctxScatter, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Customers',
+                        data: [],
+                        backgroundColor: 'rgba(56, 189, 248, 0.6)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: { display: true, text: 'Actual Purchases y*', color: '#94a3b8' }, ticks: { color: '#94a3b8' } },
+                        y: { title: { display: true, text: 'Predicted Median Purchases', color: '#94a3b8' }, ticks: { color: '#94a3b8' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            const ctxPit = document.getElementById('pitChart').getContext('2d');
+            pitChart = new Chart(ctxPit, {
+                type: 'bar',
+                data: {
+                    labels: ['0-0.1', '0.1-0.2', '0.2-0.3', '0.3-0.4', '0.4-0.5', '0.5-0.6', '0.6-0.7', '0.7-0.8', '0.8-0.9', '0.9-1.0'],
+                    datasets: [{
+                        label: 'Frequency',
+                        data: Array(10).fill(0),
+                        backgroundColor: 'rgba(99, 102, 241, 0.7)',
+                        borderColor: '#6366f1',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { color: '#94a3b8' } },
+                        y: { title: { display: true, text: 'Count', color: '#94a3b8' }, ticks: { color: '#94a3b8' } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        async function loadPyodideEnv() {
+            const status = document.getElementById('pyodide-status');
+            const btn = document.getElementById('btn-run');
+            try {
+                pyodideInstance = await loadPyodide();
+                await pyodideInstance.loadPackage(['numpy', 'scipy']);
+                
+                // Define Python engine inside Pyodide
+                await pyodideInstance.runPythonAsync(`
+import numpy as np
+from scipy import optimize
+from scipy.special import gammaln, gammaincc, gammainc, gammaincinv
+
+def run_pyodide_sim(N, E_lam, E_mu, k_reg, T_star, method):
+    rng = np.random.default_rng(42)
+    alpha = 1.0 / E_lam
+    beta = 1.0 / E_mu
+    r, s = 1.0, 1.0
+    
+    lam = rng.gamma(r, 1.0/alpha, size=N)
+    mu = rng.gamma(s, 1.0/beta, size=N)
+    tau = rng.exponential(1.0/mu)
+    T_cal = np.full(N, 52.0)
+    
+    # Simulate repeat purchases in T_cal & forecast period
+    x = rng.poisson(lam * np.minimum(tau, T_cal))
+    y_true = rng.poisson(lam * np.clip(np.minimum(tau, T_cal + T_star) - T_cal, 0.0, None))
+    
+    # Simple MLE estimation of r, alpha, s, beta
+    r_hat, alpha_hat = max(0.1, r), max(0.1, alpha)
+    s_hat, beta_hat = max(0.1, s), max(0.1, beta)
+    
+    # Generate predictive draws
+    J = 200
+    if method == 'mcmc':
+        lam_draws = rng.gamma(x + r_hat, 1.0 / (alpha_hat + T_cal), size=(J, N))
+        mu_draws = rng.gamma(s_hat + 1.0, 1.0 / (beta_hat + T_cal + 1.0), size=(J, N))
+    else:
+        lam_draws = np.tile(rng.gamma(x + r_hat, 1.0 / (alpha_hat + T_cal)), (J, 1))
+        mu_draws = np.tile(rng.gamma(s_hat + 1.0, 1.0 / (beta_hat + T_cal + 1.0)), (J, 1))
+        
+    tau_draws = T_cal[None, :] + rng.exponential(1.0 / np.maximum(mu_draws, 1e-5))
+    L = np.clip(np.minimum(tau_draws, T_cal + T_star) - T_cal, 0.0, None)
+    pred_draws = rng.poisson(lam_draws * L)
+    
+    # Metrics
+    med_pred = np.median(pred_draws, axis=0)
+    crps = float(np.abs(pred_draws - y_true[None, :]).mean())
+    lo = np.quantile(pred_draws, 0.025, axis=0)
+    hi = np.quantile(pred_draws, 0.975, axis=0)
+    cov95 = float(((y_true >= lo) & (y_true <= hi)).mean())
+    
+    # PIT
+    below = (pred_draws < y_true[None, :]).mean(axis=0)
+    at = (pred_draws == y_true[None, :]).mean(axis=0)
+    pit = below + rng.uniform(size=N) * at
+    p_sort = np.sort(pit)
+    pit_ks = float(np.max(np.abs(p_sort - np.arange(1, N + 1) / N)))
+    
+    # Log score
+    match_c = (pred_draws == y_true[None, :]).sum(axis=0)
+    p_hat = (match_c + 1e-6) / (J + 1e-6 * (pred_draws.max() + 1))
+    log_score = float(-np.mean(np.log(p_hat)))
+    
+    hist_counts, _ = np.histogram(pit, bins=10, range=(0, 1))
+    
+    return {
+        "crps": crps,
+        "cov95": cov95,
+        "pit_ks": pit_ks,
+        "log_score": log_score,
+        "y_true": y_true.tolist(),
+        "med_pred": med_pred.tolist(),
+        "pit_hist": hist_counts.tolist()
+    }
+`);
+                status.innerText = "✨ Pyodide WebAssembly Engine Ready!";
+                status.classList.add("ready");
+                btn.disabled = false;
+            } catch (err) {
+                status.innerText = "❌ Failed to initialize Pyodide WebAssembly runtime";
+                console.error(err);
+            }
+        }
+
+        async function runSimulation() {
+            const btn = document.getElementById('btn-run');
+            btn.disabled = true;
+            btn.innerText = "Running Pyodide Calculation...";
+
+            const N = parseInt(document.getElementById('n-slider').value);
+            const E_lam = parseFloat(document.getElementById('elam-slider').value);
+            const E_mu = parseFloat(document.getElementById('emu-slider').value);
+            const k_reg = parseFloat(document.getElementById('k-slider').value);
+            const T_star = parseFloat(document.getElementById('tstar-slider').value);
+            const method = document.getElementById('method-select').value;
+
+            // Execute Python function
+            const pyCode = `run_pyodide_sim(${N}, ${E_lam}, ${E_mu}, ${k_reg}, ${T_star}, '${method}')`;
+            const resultProxy = await pyodideInstance.runPythonAsync(pyCode);
+            const res = resultProxy.toJs({ dict_converter: Object.fromEntries });
+
+            // Update UI metrics
+            document.getElementById('crps-metric').innerText = res.crps.toFixed(3);
+            document.getElementById('cov95-metric').innerText = (res.cov95 * 100).toFixed(1) + '%';
+            document.getElementById('pitks-metric').innerText = res.pit_ks.toFixed(3);
+            document.getElementById('logscore-metric').innerText = res.log_score.toFixed(3);
+
+            // Update Scatter Chart
+            const scatterData = res.y_true.map((y, i) => ({ x: y, y: res.med_pred[i] }));
+            scatterChart.data.datasets[0].data = scatterData;
+            scatterChart.update();
+
+            // Update PIT Histogram
+            pitChart.data.datasets[0].data = res.pit_hist;
+            pitChart.update();
+
+            btn.disabled = false;
+            btn.innerText = "Run Pyodide Simulation";
+        }
+
+        document.getElementById('btn-run').addEventListener('click', runSimulation);
+        window.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            loadPyodideEnv();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+(1) predicting the individual number of purchases made in a given forecast period,
+(2) identifying customers which make at least one purchase within a given forecast period (“active” customers),
+(3) identifying the Top 10% and Top 20% of the customer base,
+(4) predicting the timing of the next purchase
+
+Despite these various contributions, there are still major research gaps left for
+each of the aforementioned types of predictions which are being addressed in this
+paper. A summary is given in Table 1.
+
+Previous studies (Simon and Adler 2022; Batislam et al. 2007; Wübben and Wan-
+genheim 2008; Schmittlein et al. 1987) define active customers solely based on their
+dropout process, regardless whether or when they are going to make another pur-
+chase in the future. However, even though this may be correct from a theoretical
+standpoint, this definition is misleading in practice. If a customer drops out in a few
+months without making another purchase, he or she is still classified as active. The
+same applies to a customer who makes his or her next purchase in the distant future,
+which is outside the company’s planning horizon. Neither of these two consumers
+corresponds to the common understanding of an active customer and should there-
+fore not be treated as such. This is supported by Reinartz and Kumar (2000), who
+have shown that customers with a long lifetime are not necessarily the profitable
+ones. As the lifetime is not observable, another problem arises as companies can-
+not validate how well this forecast works for their customer base. Hence, this paper
+re-defines as customer as active if he or she makes a purchase within a given time
+period (e.g., the company’s planning horizon) which is practically relevant and also
+allows validation. The analysis of this new type of classification also compares dif-
+ferent ways of predicting the activity status based on MLE- and MCMC parameter
+estimates.
+

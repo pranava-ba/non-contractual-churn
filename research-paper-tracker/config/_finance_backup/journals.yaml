@@ -1,0 +1,38 @@
+# Curated "top journals" grouped by area. These feed the pure topic buckets
+# (information theory, finance, quantitative finance). The cross-cutting
+# categories (bayesian, gold, silver, IT+finance) search ALL venues via
+# keyword, so a paper in Nature / Scientific Reports / anywhere still gets
+# caught there without polluting these lists.
+#
+# tier: 1 = flagship, 2 = strong, 3 = specialized. Used only for ranking ties.
+# issn: any one ISSN for the journal (OpenAlex matches the journal's ISSN set).
+# Add or remove venues freely — one line each.
+
+areas:
+  information_theory:
+    - {name: "IEEE Transactions on Information Theory",              issn: "0018-9448", tier: 1}
+    # sieve: true -> broad venue; in the pure IT bucket its papers must contain
+    # an information-theory term (see categories.yaml sieve_terms).
+    - {name: "Entropy",                                             issn: "1099-4300", tier: 2, sieve: true}
+    - {name: "IEEE Transactions on Communications",                 issn: "0090-6778", tier: 2}
+    - {name: "IEEE Journal on Selected Areas in Information Theory", issn: "2641-8770", tier: 2}
+
+  finance:
+    - {name: "The Journal of Finance",             issn: "0022-1082", tier: 1}
+    - {name: "The Review of Financial Studies",    issn: "0893-9454", tier: 1}
+    - {name: "Journal of Financial Economics",     issn: "0304-405X", tier: 1}
+    - {name: "Review of Finance",                  issn: "1572-3097", tier: 2}
+    - {name: "Journal of Financial and Quantitative Analysis", issn: "0022-1090", tier: 2}
+    - {name: "Journal of Banking & Finance",       issn: "0378-4266", tier: 2}
+    - {name: "Journal of Financial Markets",       issn: "1386-4181", tier: 2}
+    - {name: "Journal of Econometrics",            issn: "0304-4076", tier: 1}   # home of Bayesian-finance methods
+    - {name: "Journal of Business & Economic Statistics", issn: "0735-0015", tier: 2}
+
+  quant_finance:
+    - {name: "Quantitative Finance",                       issn: "1469-7688", tier: 1}
+    - {name: "Mathematical Finance",                       issn: "0960-1627", tier: 1}
+    - {name: "Finance and Stochastics",                    issn: "0949-2984", tier: 1}
+    - {name: "SIAM Journal on Financial Mathematics",      issn: "1945-497X", tier: 2}
+    - {name: "Applied Mathematical Finance",               issn: "1350-486X", tier: 2}
+    - {name: "International Journal of Theoretical and Applied Finance", issn: "0219-0249", tier: 3}
+    - {name: "Physica A: Statistical Mechanics and its Applications",   issn: "0378-4371", tier: 3}  # econophysics / entropy-in-finance

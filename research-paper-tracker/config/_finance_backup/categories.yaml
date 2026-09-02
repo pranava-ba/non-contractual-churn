@@ -1,0 +1,170 @@
+# The 7 tracked categories.
+#
+# Each category has a list of `feeds` (where candidates come from) and, for the
+# keyword categories, `require_all` / `exclude` term filters applied to the
+# title + abstract of every candidate.
+#
+#   require_all: a list of GROUPS. A paper is kept only if it matches at least
+#                one term from EVERY group  ->  (group1) AND (group2) AND ...
+#                Within a group, terms are OR'd.
+#   exclude:     if any term appears, the paper is dropped.
+#
+# Term matching is case-insensitive and word-boundary aware, so "gold" does not
+# match "golden"/"marigold". A trailing "*" means prefix match, e.g. "volatilit*"
+# matches volatility / volatilities.
+#
+# rank_by: "tier"      -> journal prestige then recency (topic buckets)
+#          "relevance" -> match strength / API relevance then recency (keyword buckets)
+
+categories:
+  # 1 -------------------------------------------------------------------------
+  - key: information_theory
+    label: "Information Theory"
+    rank_by: tier
+    top_n: 15
+    # Applied ONLY to papers from sieve-flagged broad venues (Entropy). Core IT
+    # venues (IEEE T-IT, arXiv cs.IT) bypass it. Keeps info-theory-method papers,
+    # drops broad-journal papers with no IT vocabulary at all.
+    sieve_terms:
+      - entropy
+      - "mutual information"
+      - "information theory"
+      - "information-theoretic"
+      - "information bottleneck"
+      - "channel capacity"
+      - capacity
+      - "channel coding"
+      - "source coding"
+      - "network coding"
+      - "coding theory"
+      - "error correct*"
+      - "linear code*"
+      - "ldpc"
+      - "polar code*"
+      - "turbo code*"
+      - shannon
+      - "rate distortion"
+      - "data compression"
+      - kullback
+      - "relative entropy"
+      - "differential entropy"
+      - "fisher information"
+      - "achievable rate"
+      - cryptograph*
+      - quantiz*
+    feeds:
+      - {source: openalex, mode: journals, areas: [information_theory]}
+      - {source: arxiv,    mode: categories, cats: [cs.IT]}
+
+  # 2 -------------------------------------------------------------------------
+  - key: finance
+    label: "Finance"
+    rank_by: tier
+    top_n: 15
+    feeds:
+      - {source: openalex, mode: journals, areas: [finance]}
+
+  # 3 -------------------------------------------------------------------------
+  - key: quantitative_finance
+    label: "Quantitative Finance"
+    rank_by: tier
+    top_n: 15
+    feeds:
+      - {source: openalex, mode: journals, areas: [quant_finance]}
+      - {source: arxiv,    mode: categories,
+         cats: [q-fin.CP, q-fin.GN, q-fin.MF, q-fin.PM, q-fin.PR, q-fin.RM, q-fin.ST, q-fin.TR, q-fin.EC]}
+
+  # 4 -------------------------------------------------------------------------
+  - key: finance_bayesian
+    label: "Finance + Bayesian"
+    rank_by: relevance
+    top_n: 15
+    min_hits: [2, 1]   # >=2 finance signals + >=1 Bayesian term (drops incidental one-word matches)
+    feeds:
+      - {source: openalex, mode: keyword, query: "bayesian financial markets"}
+      - {source: arxiv,    mode: keyword,
+         query: 'abs:bayesian AND (abs:finance OR abs:portfolio OR abs:asset OR abs:volatility)'}
+    require_all:
+      - [finance, financial, "asset pricing", portfolio, market, "volatilit*", stock, equity, option,
+         "risk premium", "term structure", derivative, hedge]
+      - [bayesian, posterior, prior, mcmc, "markov chain monte carlo", "gibbs sampl*",
+         "hierarchical model", "variational infer*", "particle filter", "sequential monte carlo"]
+
+  # 5 -------------------------------------------------------------------------
+  - key: gold_finance
+    label: "Gold in Finance"
+    rank_by: relevance
+    top_n: 15
+    min_hits: [1, 2]   # gold term + at least 2 finance signals (kills CS "gold-standard/gold-label" noise)
+    feeds:
+      - {source: openalex, mode: keyword, query: "gold price market hedge safe haven"}
+      - {source: arxiv,    mode: keyword,
+         query: 'abs:gold AND (abs:price OR abs:market OR abs:hedge OR abs:haven)'}
+    require_all:
+      - [gold, bullion, xau, "precious metal"]
+      - [finance, financial, market, price, hedge, "safe haven", portfolio, investment,
+         return, "volatilit*", asset, "commodit*", futures]
+    exclude:
+      - "gold standard"
+      - golden
+      - "gold nanoparticle*"
+      - "colloidal gold"
+      - "gold coast"
+      - "gold catalyst"
+      - "gold electrode"
+      - "gold film"
+      - "gold cluster"
+      - "gold nanostructure*"
+      - goldstone
+
+  # 6 -------------------------------------------------------------------------
+  - key: information_theory_finance
+    label: "Information Theory + Finance"
+    important: true
+    rank_by: relevance
+    top_n: 15
+    # Each group must reach this strength (title hit = 2, abstract hit = 1).
+    # Kills incidental single-"entropy" + one-finance-word false positives while
+    # keeping papers that foreground the IT concept or use several IT terms.
+    min_hits: [2, 2]
+    feeds:
+      - {source: openalex, mode: keyword, query: "entropy information theory financial markets"}
+      - {source: arxiv,    mode: cross, all_of: [cs.IT, q-fin]}
+      - {source: arxiv,    mode: keyword,
+         query: '(abs:entropy OR abs:"mutual information" OR abs:"transfer entropy" OR abs:Kelly) AND (abs:market OR abs:portfolio OR abs:financial OR abs:trading)'}
+    require_all:
+      - [entropy, "mutual information", "information theory", "information-theoretic",
+         "transfer entropy", kelly, "minimum description length", kullback, shannon,
+         "relative entropy", "channel capacity", "fisher information", "maximum entropy"]
+      - [finance, financial, market, portfolio, asset, price, stock, trading,
+         investment, "volatilit*", return, risk]
+
+  # 7 -------------------------------------------------------------------------
+  - key: silver_finance
+    label: "Silver in Finance"
+    rank_by: relevance
+    top_n: 15
+    min_hits: [1, 2]   # silver term + at least 2 finance signals
+    feeds:
+      - {source: openalex, mode: keyword, query: "silver price market hedge"}
+      - {source: arxiv,    mode: keyword,
+         query: 'abs:silver AND (abs:price OR abs:market OR abs:hedge)'}
+    require_all:
+      - [silver, xag, "precious metal"]
+      - [finance, financial, market, price, hedge, "safe haven", portfolio, investment,
+         return, "volatilit*", asset, "commodit*", futures]
+    exclude:
+      - "silver bullet"
+      - silverman
+      - "silver nanoparticle*"
+      - "colloidal silver"
+      - "silver nitrate"
+      - "silver film"
+      - "silver electrode"
+      - "silver catalyst"
+      - "silver standard"
+      - quicksilver
+      - "silver ratio"
+      - "silver medal"
+      - "silver age"
+      - "silver nanostructure*"

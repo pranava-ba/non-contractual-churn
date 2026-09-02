@@ -1,0 +1,165 @@
+explain each of these terms with a definition, a simple explanation, one or two examples, diagrams if applicable
+
+section: abstract
+
+forecasting efficacy
+pareto
+negative binomial distribution (nbd)
+model based forecasts
+Pareto/NBD model-based forecasts
+Monte Carlo Markov Chain (MCMC)
+Monte Carlo Markov Chain (MCMC)-based estimates
+Maximum Likelihood Estimation (MLE)
+heuristics 
+confidence intervals
+Customer base analysis
+
+section: 1. Introduction
+
+buy-till-you-die (BTYD)
+non-contractual setting of customer base analysis (CBA)
+dropout
+unobserved dropout
+purchase pattern of a customer
+distribution 
+distribution of the dropout time
+beta geometric dropout process
+(modified) beta geometric dropout process [what is modified and why]
+low threshold use of model extensions
+static and time-variant covariates
+gamma distributed
+exponentially distributed
+exponentially distributed inter-purchase times
+cohorts 
+simultaneously analysing different cohorts
+likelihoods
+closed-form likelihoods
+well-fitting
+parametric models
+well-fitting parametric models
+parsimonious data
+bias 
+cohort level
+lower bias at the cohort level
+calibration length
+forecast period
+interpretable parameters
+point estimates
+bootstrapping
+applying bootstrapping to MLE
+parameter re-estimation
+unnormalised probability distribution
+mode
+mode, i.e., the parameter value(s) yielding the highest likelihood value
+posterior distribution
+mean, median, and quantiles
+heterogeneity parameters
+parameter recovery 
+goodness-of-fit
+goodness-of-fit of different models
+customer lifetime value (CLV)
+empirical data sets 
+point estimates for the deviations measures
+empirical validation
+parameter estimation
+data set generating parameters
+
+section: 2. Forecasting methods
+
+inter-purchase times (ipt)
+exponentially distributed with parameter λi
+Gamma distribution with parameters r and α
+latent attrition process
+heterogeneous likelihood
+heterogeneity parameters
+
+section 2.1 Purchase forecast
+
+simulated purchase patterns (SPP)
+individual conditional expectation (ICE)
+heterogeneous formula
+mean purchase rate
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
