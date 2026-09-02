@@ -1,0 +1,72 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+
+# LaTeX
+paper/*.aux
+paper/*.bbl
+paper/*.blg
+paper/*.fdb_latexmk
+paper/*.fls
+paper/*.log
+paper/*.out
+paper/*.toc
+paper/*.synctex.gz
+
+# Research manuscripts — the paper is a separate deliverable, kept out of the code repo.
+paper/
+
+# Large datasets — fetch locally via src/datasets.py; too big for the repo (GitHub caps at 100 MB).
+# The small CDNow/Grocery benchmark files under data/ are kept.
+data/dunnhumby/
+data/olist/
+data/tafeng/
+data/online_retail_II.csv
+
+# Upload bundle — a build artifact / duplicate of the repo, not source.
+github_upload_bundle/
+github_upload_bundle.zip
+
+# Archive — local backups / zipped snapshots (e.g. references.zip), not source.
+archive/
+
+# Environments & IDEs
+.env
+.venv
+env/
+venv/
+ENV/
+.vscode/
+.idea/
+
+# Sphinx docs build
+docs/_build/
+
+# Temporary / Scratch
+.gemini/
+
+# Reference PDFs — copyrighted third-party papers, kept local only
+references/
+
+# Run logs & markers
+*.log
+*.done
