@@ -55,3 +55,37 @@ TEST_CASE("fit_gamma_gamma matches the Python reference within 5% relative", "[c
     REQUIRE(fit.q == Catch::Approx(golden["q"].get<double>()).epsilon(0.05));
     REQUIRE(fit.v == Catch::Approx(golden["v"].get<double>()).epsilon(0.05));
 }
+
+TEST_CASE("sample_posterior_nu's empirical mean converges to the analytical posterior mean", "[clv]") {
+    std::ifstream f(std::string(PROJECT_MODELS_DIR) + "/clv_conformal_golden.json");
+    nlohmann::json golden;
+    f >> golden;
+
+    std::vector<double> x = golden["x"].get<std::vector<double>>();
+    std::vector<double> m_obs = golden["m_obs"].get<std::vector<double>>();
+    pareto_nbd::GammaGammaParams params{
+        golden["p"].get<double>(), golden["q"].get<double>(), golden["v"].get<double>()};
+
+    auto analytical = pareto_nbd::posterior_mean_nu(x, m_obs, params);
+    auto draws = pareto_nbd::sample_posterior_nu(x, m_obs, params, 200000, 7);
+
+    REQUIRE(draws.size() == 200000);
+    REQUIRE(draws[0].size() == x.size());
+
+    // Empirical mean per customer over all draws.
+    std::vector<double> empirical_mean(x.size(), 0.0);
+    for (const auto& draw : draws) {
+        for (size_t i = 0; i < x.size(); ++i) empirical_mean[i] += draw[i];
+    }
+    for (double& m : empirical_mean) m /= static_cast<double>(draws.size());
+
+    // Check a sample of customers (checking all 500 with per-customer
+    // Monte Carlo noise would make this test flaky; the mean absolute
+    // relative error across a subset is a stabler statistic).
+    double total_rel_err = 0.0;
+    for (size_t i = 0; i < x.size(); i += 25) {  // every 25th customer, ~20 checks
+        total_rel_err += std::abs(empirical_mean[i] - analytical[i]) / analytical[i];
+    }
+    double mean_rel_err = total_rel_err / (x.size() / 25 + 1);
+    REQUIRE(mean_rel_err < 0.05);
+}

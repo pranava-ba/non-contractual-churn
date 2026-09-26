@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <vector>
 
 namespace pareto_nbd {
@@ -33,5 +34,17 @@ std::vector<std::vector<double>> predict_clv_distribution(
 // — see the plan's Global Constraints for the tolerance this is checked
 // against.
 GammaGammaParams fit_gamma_gamma(const std::vector<double>& x, const std::vector<double>& m_obs);
+
+// Monte Carlo posterior draws of each customer's mean transaction value
+// nu_i: draw g ~ Gamma(shape, rate=scale) and return nu = 1/g (nu has an
+// Inverse-Gamma posterior; sampling a Gamma directly would invert the
+// scale — see clv.py's sample_posterior_nu docstring). NOT expected to
+// reproduce numpy's specific random draws — cross-checked only via
+// statistical convergence of the empirical mean to posterior_mean_nu's
+// analytical answer (see the plan's Global Constraints).
+std::vector<std::vector<double>> sample_posterior_nu(const std::vector<double>& x,
+                                                      const std::vector<double>& m_obs,
+                                                      const GammaGammaParams& params,
+                                                      size_t n_draws, uint64_t seed);
 
 }  // namespace pareto_nbd
