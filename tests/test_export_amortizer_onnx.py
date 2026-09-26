@@ -2,6 +2,11 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("skl2onnx")
+pytest.importorskip("onnxruntime")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from export_amortizer_onnx import train_amortizer, export_scalers
@@ -58,7 +63,11 @@ def test_generate_golden_cases_writes_expected_shape(tmp_path):
     cases = json.loads(out_path.read_text())
     assert len(cases) == 3
     for case in cases:
-        assert set(case.keys()) == {"features", "r", "alpha", "s", "beta"}
+        assert set(case.keys()) == {
+            "features", "r", "alpha", "s", "beta", "x", "t_x", "T_cal",
+        }
         assert len(case["features"]) == 11
         assert case["r"] > 0 and case["alpha"] > 0
         assert case["s"] > 0 and case["beta"] > 0
+        assert len(case["x"]) == len(case["t_x"]) == len(case["T_cal"])
+        assert len(case["x"]) > 0
