@@ -92,3 +92,32 @@ def export_mlp_onnx(am: dict, path) -> None:
         graph.output[0].type.tensor_type.shape.dim[1].dim_value = n_outputs
 
     Path(path).write_bytes(onnx_model.SerializeToString())
+
+
+import numpy as np
+
+from simulate import DatasetParams, simulate_dataset  # noqa: E402
+from amortized import cohort_features, amortized_params  # noqa: E402
+
+_GOLDEN_PARAMS = [
+    DatasetParams(0.15, 1.3, 0.08, 1.2, N=1200, T=52.0),
+    DatasetParams(0.05, 0.8, 0.03, 1.8, N=600, T=26.0),
+    DatasetParams(0.25, 2.0, 0.15, 0.6, N=900, T=39.0),
+]
+
+
+def generate_golden_cases(am: dict, path, seed: int = 0) -> None:
+    """Simulate a handful of fixed cohorts, run them through the real
+    amortized_params() pipeline, and record (features -> params) pairs that
+    a C++ port must reproduce."""
+    rng = np.random.default_rng(seed)
+    cases = []
+    for params in _GOLDEN_PARAMS:
+        df = simulate_dataset(params, rng=rng)
+        features = cohort_features(df)
+        r, alpha, s, beta, _, _ = amortized_params(am, df)
+        cases.append({
+            "features": features.tolist(),
+            "r": r, "alpha": alpha, "s": s, "beta": beta,
+        })
+    Path(path).write_text(json.dumps(cases, indent=2))

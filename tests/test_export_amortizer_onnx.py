@@ -30,7 +30,7 @@ def test_export_scalers_writes_expected_json(tmp_path):
 import numpy as np
 import onnxruntime as ort
 
-from export_amortizer_onnx import export_mlp_onnx
+from export_amortizer_onnx import export_mlp_onnx, generate_golden_cases
 
 
 def test_export_mlp_onnx_matches_sklearn_predict(tmp_path):
@@ -48,3 +48,17 @@ def test_export_mlp_onnx_matches_sklearn_predict(tmp_path):
     actual = sess.run(None, {input_name: x_scaled})[0]
 
     np.testing.assert_allclose(actual, expected, rtol=1e-3, atol=1e-4)
+
+
+def test_generate_golden_cases_writes_expected_shape(tmp_path):
+    am = train_amortizer(seed=0, n_cohorts=50)
+    out_path = tmp_path / "golden.json"
+    generate_golden_cases(am, out_path, seed=1)
+
+    cases = json.loads(out_path.read_text())
+    assert len(cases) == 3
+    for case in cases:
+        assert set(case.keys()) == {"features", "r", "alpha", "s", "beta"}
+        assert len(case["features"]) == 11
+        assert case["r"] > 0 and case["alpha"] > 0
+        assert case["s"] > 0 and case["beta"] > 0
