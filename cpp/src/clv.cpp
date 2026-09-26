@@ -1,6 +1,7 @@
 #include "pareto_nbd/clv.hpp"
 
 #include <cmath>
+#include <random>
 
 #include "pareto_nbd/nelder_mead.hpp"
 
@@ -79,6 +80,38 @@ GammaGammaParams fit_gamma_gamma(const std::vector<double>& x, const std::vector
     auto result = nelder_mead(objective, x0);
 
     return {std::exp(result.x[0]), std::exp(result.x[1]), std::exp(result.x[2])};
+}
+
+std::vector<std::vector<double>> sample_posterior_nu(const std::vector<double>& x,
+                                                      const std::vector<double>& m_obs,
+                                                      const GammaGammaParams& params,
+                                                      size_t n_draws, uint64_t seed) {
+    const size_t N = x.size();
+    std::vector<double> shape(N), scale(N);
+    for (size_t i = 0; i < N; ++i) {
+        if (x[i] > 0.0) {
+            shape[i] = params.p * x[i] + params.q;
+            scale[i] = params.p * x[i] * m_obs[i] + params.v;
+        } else {
+            shape[i] = params.q;
+            scale[i] = params.v;
+        }
+    }
+
+    std::vector<std::gamma_distribution<double>> dists;
+    dists.reserve(N);
+    for (size_t i = 0; i < N; ++i) {
+        dists.emplace_back(shape[i], 1.0 / scale[i]);  // Gamma(shape, scale=1/scale_i)
+    }
+
+    std::mt19937_64 rng(seed);
+    std::vector<std::vector<double>> nu(n_draws, std::vector<double>(N));
+    for (size_t d = 0; d < n_draws; ++d) {
+        for (size_t i = 0; i < N; ++i) {
+            nu[d][i] = 1.0 / dists[i](rng);
+        }
+    }
+    return nu;
 }
 
 }  // namespace pareto_nbd
