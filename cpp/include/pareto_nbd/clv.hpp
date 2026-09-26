@@ -25,4 +25,13 @@ std::vector<std::vector<double>> predict_clv_distribution(
     const std::vector<std::vector<double>>& nu_draws,
     double discount_rate);
 
+// Fits (p, q, v) by maximum likelihood via Nelder-Mead, mirroring
+// clv.fit_gamma_gamma exactly: filters to customers with x>0 and
+// m_obs>0, optimizes the same log-space negative log-likelihood from the
+// same x0 = log([2.0, 2.0, 10.0]) starting point. A from-scratch
+// optimizer is not expected to land on bit-identical (p,q,v) to SciPy's
+// — see the plan's Global Constraints for the tolerance this is checked
+// against.
+GammaGammaParams fit_gamma_gamma(const std::vector<double>& x, const std::vector<double>& m_obs);
+
 }  // namespace pareto_nbd
