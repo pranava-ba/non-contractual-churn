@@ -101,6 +101,107 @@ against real usage.
 - **MinIO** (S3-compatible): raw uploaded CSVs, generated export files.
 - **Redis**: job queue + job-status cache between API and workers.
 
+#### 4.4.1 Database schema (forward-compatible with the prescriptive/uplift module)
+
+Auth and multi-tenancy are out of scope for this phase (§10), but two schema
+decisions now avoid a rework when they — and the prescriptive/uplift layer
+discussed in §11 — get built:
+
+1. Every table carries a `business_id` FK from day one, even though there is
+   only ever one row in `businesses` until multi-tenancy ships. Retrofitting
+   a tenant column onto populated tables later is far more disruptive than
+   including an unused one now.
+2. **Customers are first-class, persistent entities**, not rows scoped to a
+   single upload. A business re-uploads its transaction log over time (new
+   `jobs`), and each upload should update the *same* customer record rather
+   than creating a disconnected copy — that's what lets `forecast_results`
+   accumulate into a per-customer history, and it's the exact join key a
+   future `campaign_assignments`/`campaign_outcomes` table needs to line up
+   "what we predicted for this customer" with "what campaign they got and
+   what happened" (the (X, T, Y) shape `estimate_uplift` in
+   [src/prescriptive.py](../../../src/prescriptive.py) already expects).
+
+```sql
+-- Present now, populated with a single row until multi-tenancy ships.
+CREATE TABLE businesses (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE jobs (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id  UUID NOT NULL REFERENCES businesses(id),
+    status       TEXT NOT NULL CHECK (status IN ('queued','running','done','failed')),
+    upload_path  TEXT NOT NULL,   -- MinIO object key for the raw CSV
+    error_reason TEXT,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at TIMESTAMPTZ
+);
+
+-- One row per real-world customer, persistent across re-uploads.
+CREATE TABLE customers (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id         UUID NOT NULL REFERENCES businesses(id),
+    external_customer_id TEXT NOT NULL,  -- the customer_id from the uploaded CSV
+    first_seen_job_id   UUID NOT NULL REFERENCES jobs(id),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (business_id, external_customer_id)
+);
+
+-- One row per (customer, job): a time series of forecasts as new uploads arrive.
+CREATE TABLE forecast_results (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_id         UUID NOT NULL REFERENCES jobs(id),
+    customer_id    UUID NOT NULL REFERENCES customers(id),
+    expected_purchases DOUBLE PRECISION NOT NULL,
+    p_alive        DOUBLE PRECISION NOT NULL,
+    clv_point      DOUBLE PRECISION NOT NULL,
+    clv_lower      DOUBLE PRECISION NOT NULL,
+    clv_upper      DOUBLE PRECISION NOT NULL,
+    model_params   JSONB NOT NULL,   -- e.g. {r, alpha, s, beta} for this fit
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (job_id, customer_id)
+);
+```
+
+**Not built in this phase** — shown only to confirm the tables above join to
+it without modification, i.e. adding it later is additive, not a migration
+of existing tables:
+
+```sql
+CREATE TABLE campaigns (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id  UUID NOT NULL REFERENCES businesses(id),
+    name         TEXT NOT NULL,
+    started_at   TIMESTAMPTZ NOT NULL,
+    ended_at     TIMESTAMPTZ
+);
+
+-- The "T" in (X, T, Y): who got treated.
+CREATE TABLE campaign_assignments (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    campaign_id  UUID NOT NULL REFERENCES campaigns(id),
+    customer_id  UUID NOT NULL REFERENCES customers(id),
+    treated      BOOLEAN NOT NULL,
+    assigned_at  TIMESTAMPTZ NOT NULL,
+    UNIQUE (campaign_id, customer_id)
+);
+
+-- The "Y" in (X, T, Y): what happened to them afterward.
+CREATE TABLE campaign_outcomes (
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    campaign_assignment_id UUID NOT NULL REFERENCES campaign_assignments(id),
+    outcome_metric         TEXT NOT NULL,   -- e.g. 'retained', 'clv_90d'
+    outcome_value          DOUBLE PRECISION NOT NULL,
+    observed_at            TIMESTAMPTZ NOT NULL
+);
+```
+
+The "X" (features) side of the uplift estimator's (X, T, Y) contract is just
+the `forecast_results` row for that customer as of the campaign's
+`started_at` — no new feature-storage table needed.
+
 ## 5. Correctness strategy
 
 Every computation ported from the validated Python implementation to C++
@@ -174,3 +275,26 @@ assumed.
 - Native C++ MCMC.
 - Data warehouse/DB connectors (Postgres, Snowflake, Shopify, etc.) — CSV
   upload only.
+- The prescriptive/uplift layer (§11) — not built, but the schema in §4.4.1
+  is deliberately shaped so it can be added without migrating existing
+  tables.
+
+## 11. Future extension: prescriptive/uplift layer
+
+A natural second major phase of the *product* (distinct from the phased
+build order in §9, which only covers this descriptive MVP): once a business
+has forecast data flowing and starts asking "who should I actually spend
+retention budget on," the causal uplift research already validated in
+[src/prescriptive.py](../../../src/prescriptive.py) and written up in
+[docs/uplift.md](../../../docs/uplift.md) (referred to elsewhere as "Gear 2")
+answers that — the conditional treatment effect (CATE) of a retention
+action per customer, as opposed to their raw churn risk.
+
+This is deliberately not part of the current build for two reasons: it
+needs a different input (campaign treatment/outcome history, not just a
+transaction log) that a new customer won't have on day one, and the
+underlying research is still at Stage A/B validation (simulated + two real
+datasets), not yet its own published result. §4.4.1's `campaigns`,
+`campaign_assignments`, and `campaign_outcomes` tables exist in this spec
+only to confirm that adding this layer later is additive to the schema, not
+a rework of it.
