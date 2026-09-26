@@ -1,0 +1,9 @@
+{
+  "name": "pareto-nbd-inference",
+  "version": "0.1.0",
+  "dependencies": [
+    "onnxruntime",
+    "nlohmann-json",
+    "catch2"
+  ]
+}
