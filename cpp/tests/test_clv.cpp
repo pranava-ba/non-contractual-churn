@@ -83,9 +83,11 @@ TEST_CASE("sample_posterior_nu's empirical mean converges to the analytical post
     // Monte Carlo noise would make this test flaky; the mean absolute
     // relative error across a subset is a stabler statistic).
     double total_rel_err = 0.0;
+    size_t count = 0;
     for (size_t i = 0; i < x.size(); i += 25) {  // every 25th customer, ~20 checks
         total_rel_err += std::abs(empirical_mean[i] - analytical[i]) / analytical[i];
+        ++count;
     }
-    double mean_rel_err = total_rel_err / (x.size() / 25 + 1);
+    double mean_rel_err = total_rel_err / static_cast<double>(count);
     REQUIRE(mean_rel_err < 0.05);
 }
