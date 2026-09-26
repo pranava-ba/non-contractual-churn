@@ -20,6 +20,9 @@ public:
     AmortizedModel(const std::string& onnx_path, const std::string& scalers_json_path);
     ~AmortizedModel();
 
+    AmortizedModel(AmortizedModel&&) noexcept;
+    AmortizedModel& operator=(AmortizedModel&&) noexcept;
+
     AmortizedParams predict(const std::array<double, 11>& features) const;
 
 private:

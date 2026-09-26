@@ -3,6 +3,8 @@
 
 #include <cmath>
 #include <fstream>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include <nlohmann/json.hpp>
@@ -29,9 +31,46 @@ struct AmortizedModel::Impl {
 
     Impl(const std::string& onnx_path, const std::string& scalers_json_path)
         : session(env, to_ort_path(onnx_path).c_str(), Ort::SessionOptions{nullptr}) {
+        // Validate the ONNX graph's I/O shapes match what predict() assumes
+        // (11 input features, 4 output log-params) so a mismatched artifact
+        // fails loudly at construction instead of producing garbage or an
+        // out-of-bounds read inside predict().
+        Ort::TypeInfo input_info = session.GetInputTypeInfo(0);
+        auto input_shape = input_info.GetTensorTypeAndShapeInfo().GetShape();
+        if (input_shape.empty() || input_shape.back() != 11) {
+            throw std::runtime_error(
+                "AmortizedModel: ONNX model at '" + onnx_path +
+                "' has an unexpected input shape (expected last dimension 11)");
+        }
+
+        Ort::TypeInfo output_info = session.GetOutputTypeInfo(0);
+        auto output_shape = output_info.GetTensorTypeAndShapeInfo().GetShape();
+        if (output_shape.empty() || output_shape.back() != 4) {
+            throw std::runtime_error(
+                "AmortizedModel: ONNX model at '" + onnx_path +
+                "' has an unexpected output shape (expected last dimension 4)");
+        }
+
         std::ifstream f(scalers_json_path);
+        if (!f) {
+            throw std::runtime_error(
+                "AmortizedModel: could not open scalers JSON at '" + scalers_json_path + "'");
+        }
         nlohmann::json j;
         f >> j;
+
+        auto require_size = [&](const char* key, size_t expected) {
+            if (!j.contains(key) || j[key].size() != expected) {
+                throw std::runtime_error(
+                    "AmortizedModel: scalers JSON at '" + scalers_json_path + "' field '" +
+                    key + "' must have exactly " + std::to_string(expected) + " elements");
+            }
+        };
+        require_size("x_mean", 11);
+        require_size("x_scale", 11);
+        require_size("y_mean", 4);
+        require_size("y_scale", 4);
+
         for (size_t i = 0; i < 11; ++i) {
             x_mean[i] = j["x_mean"][i].get<double>();
             x_scale[i] = j["x_scale"][i].get<double>();
@@ -47,6 +86,9 @@ AmortizedModel::AmortizedModel(const std::string& onnx_path, const std::string& 
     : impl_(std::make_unique<Impl>(onnx_path, scalers_json_path)) {}
 
 AmortizedModel::~AmortizedModel() = default;
+
+AmortizedModel::AmortizedModel(AmortizedModel&&) noexcept = default;
+AmortizedModel& AmortizedModel::operator=(AmortizedModel&&) noexcept = default;
 
 AmortizedParams AmortizedModel::predict(const std::array<double, 11>& features) const {
     std::vector<float> input(11);
