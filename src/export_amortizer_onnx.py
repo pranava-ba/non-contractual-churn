@@ -121,3 +121,16 @@ def generate_golden_cases(am: dict, path, seed: int = 0) -> None:
             "r": r, "alpha": alpha, "s": s, "beta": beta,
         })
     Path(path).write_text(json.dumps(cases, indent=2))
+
+
+if __name__ == "__main__":
+    models_dir = Path(__file__).resolve().parent.parent / "models"
+    models_dir.mkdir(exist_ok=True)
+
+    print("Training amortizer (seed=0, 4000 cohorts)...", flush=True)
+    am = train_amortizer(seed=0)
+
+    export_scalers(am, models_dir / "amortizer_scalers.json")
+    export_mlp_onnx(am, models_dir / "amortizer_mlp.onnx")
+    generate_golden_cases(am, models_dir / "amortizer_golden.json", seed=1)
+    print(f"Wrote artifacts to {models_dir}")
