@@ -9,6 +9,7 @@ find_package(Catch2 3 CONFIG REQUIRED)
 add_library(amortized_inference
     src/version.cpp
     src/moments.cpp
+    src/cohort_features.cpp
 )
 target_include_directories(amortized_inference PUBLIC include)
 
@@ -19,6 +20,7 @@ enable_testing()
 add_executable(unit_tests
     tests/test_version.cpp
     tests/test_moments.cpp
+    tests/test_cohort_features.cpp
 )
 target_link_libraries(unit_tests PRIVATE amortized_inference Catch2::Catch2WithMain)
 include(CTest)
