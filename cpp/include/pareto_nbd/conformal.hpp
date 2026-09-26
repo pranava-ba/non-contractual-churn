@@ -1,6 +1,5 @@
 #pragma once
 #include <vector>
-#include <cstddef>
 
 namespace pareto_nbd {
 
