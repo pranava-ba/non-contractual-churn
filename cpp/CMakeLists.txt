@@ -29,6 +29,7 @@ add_library(amortized_inference
     src/moments.cpp
     src/cohort_features.cpp
     src/amortized_model.cpp
+    src/nelder_mead.cpp
 )
 target_include_directories(amortized_inference PUBLIC include)
 target_link_libraries(amortized_inference PUBLIC
@@ -48,6 +49,7 @@ add_executable(unit_tests
     tests/test_moments.cpp
     tests/test_cohort_features.cpp
     tests/test_amortized_model.cpp
+    tests/test_nelder_mead.cpp
 )
 target_link_libraries(unit_tests PRIVATE amortized_inference Catch2::Catch2WithMain)
 target_compile_definitions(unit_tests PRIVATE
