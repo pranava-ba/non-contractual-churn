@@ -7,8 +7,19 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
+from onnx import numpy_helper
+from skl2onnx import to_onnx
+from skl2onnx.common.data_types import FloatTensorType
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from amortized import generate_training_data, fit_amortizer  # noqa: E402
+from amortized import (  # noqa: E402
+    amortized_params,
+    cohort_features,
+    fit_amortizer,
+    generate_training_data,
+)
+from simulate import DatasetParams, simulate_dataset  # noqa: E402
 
 
 def train_amortizer(seed: int = 0, n_cohorts: int = 4000) -> dict:
@@ -29,12 +40,6 @@ def export_scalers(am: dict, path) -> None:
         "y_scale": am["ys"].scale_.tolist(),
     }
     Path(path).write_text(json.dumps(data, indent=2))
-
-
-import numpy as np
-from onnx import numpy_helper
-from skl2onnx import to_onnx
-from skl2onnx.common.data_types import FloatTensorType
 
 
 def export_mlp_onnx(am: dict, path) -> None:
@@ -94,11 +99,6 @@ def export_mlp_onnx(am: dict, path) -> None:
     Path(path).write_bytes(onnx_model.SerializeToString())
 
 
-import numpy as np
-
-from simulate import DatasetParams, simulate_dataset  # noqa: E402
-from amortized import cohort_features, amortized_params  # noqa: E402
-
 _GOLDEN_PARAMS = [
     DatasetParams(0.15, 1.3, 0.08, 1.2, N=1200, T=52.0),
     DatasetParams(0.05, 0.8, 0.03, 1.8, N=600, T=26.0),
@@ -109,7 +109,10 @@ _GOLDEN_PARAMS = [
 def generate_golden_cases(am: dict, path, seed: int = 0) -> None:
     """Simulate a handful of fixed cohorts, run them through the real
     amortized_params() pipeline, and record (features -> params) pairs that
-    a C++ port must reproduce."""
+    a C++ port must reproduce. Also records each case's raw per-customer
+    arrays (x, t_x, T_cal) so a C++ test can exercise the full raw-data ->
+    cohort_features -> predict pipeline end to end, not just the predict
+    half."""
     rng = np.random.default_rng(seed)
     cases = []
     for params in _GOLDEN_PARAMS:
@@ -119,6 +122,9 @@ def generate_golden_cases(am: dict, path, seed: int = 0) -> None:
         cases.append({
             "features": features.tolist(),
             "r": r, "alpha": alpha, "s": s, "beta": beta,
+            "x": df["x"].tolist(),
+            "t_x": df["t_x"].tolist(),
+            "T_cal": df["T_cal"].tolist(),
         })
     Path(path).write_text(json.dumps(cases, indent=2))
 
