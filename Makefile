@@ -4,7 +4,7 @@
 .PHONY: help install test lint format docs paper reproduce clean
 
 help:
-	@echo "install    - editable install with dev + ml extras"
+	@echo "install    - editable install with dev + ml + onnx extras"
 	@echo "test       - run the pytest suite"
 	@echo "lint       - flake8 style check"
 	@echo "format     - black auto-format"
@@ -14,7 +14,7 @@ help:
 	@echo "clean      - remove caches and LaTeX/docs build artifacts"
 
 install:
-	pip install -e ".[dev,ml]"
+	pip install -e ".[dev,ml,onnx]"
 
 test:
 	pytest -q
