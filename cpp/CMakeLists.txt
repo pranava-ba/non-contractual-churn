@@ -31,6 +31,7 @@ add_library(amortized_inference
     src/amortized_model.cpp
     src/nelder_mead.cpp
     src/clv.cpp
+    src/conformal.cpp
 )
 target_include_directories(amortized_inference PUBLIC include)
 target_link_libraries(amortized_inference PUBLIC
@@ -52,6 +53,7 @@ add_executable(unit_tests
     tests/test_amortized_model.cpp
     tests/test_nelder_mead.cpp
     tests/test_clv.cpp
+    tests/test_conformal.cpp
 )
 target_link_libraries(unit_tests PRIVATE amortized_inference Catch2::Catch2WithMain)
 target_compile_definitions(unit_tests PRIVATE
