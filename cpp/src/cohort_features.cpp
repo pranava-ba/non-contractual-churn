@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+#include <stdexcept>
 
 namespace pareto_nbd {
 namespace {
@@ -28,6 +29,16 @@ double quantile_linear(std::vector<double> v, double q) {
 std::array<double, 11> cohort_features(const std::vector<double>& x,
                                         const std::vector<double>& t_x,
                                         const std::vector<double>& T_cal) {
+    if (x.empty()) {
+        throw std::invalid_argument("cohort_features: x must not be empty (degenerate cohort)");
+    }
+    if (t_x.size() != x.size()) {
+        throw std::invalid_argument("cohort_features: t_x.size() must equal x.size()");
+    }
+    if (T_cal.size() != x.size()) {
+        throw std::invalid_argument("cohort_features: T_cal.size() must equal x.size()");
+    }
+
     const size_t n = x.size();
     const double mean_x = mean_of(x);
 

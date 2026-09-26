@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <stdexcept>
 #include <vector>
 #include "pareto_nbd/cohort_features.hpp"
 
@@ -21,4 +22,8 @@ TEST_CASE("cohort_features matches the Python reference", "[cohort_features]") {
     REQUIRE(f[8] == Catch::Approx(0.5769230769230769));    // recency_ratio
     REQUIRE(f[9] == Catch::Approx(0.4230769230769231));    // since_last_ratio
     REQUIRE(f[10] == Catch::Approx(0.625));                // frac_active
+}
+
+TEST_CASE("cohort_features throws on empty cohort input", "[cohort_features]") {
+    REQUIRE_THROWS_AS(pareto_nbd::cohort_features({}, {}, {}), std::invalid_argument);
 }
