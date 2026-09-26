@@ -77,8 +77,18 @@ Picks jobs off the Redis queue and runs the estimation pipeline:
    there. Its trained weights are exported to **ONNX**, and the C++ worker
    runs inference via the ONNX Runtime C++ API.
 3. **CLV combination**: Gamma-Gamma spend model logic
-   ([src/clv.py](../../../src/clv.py)) is ported to C++ (closed-form
-   arithmetic, not iterative).
+   ([src/clv.py](../../../src/clv.py)) is ported to C++. Most of it —
+   the posterior mean spend formula and the final CLV combination — is
+   closed-form arithmetic, but fitting the spend model's own parameters
+   (`fit_gamma_gamma`) is a 3-parameter maximum-likelihood optimization
+   (Nelder-Mead), not closed-form. Unlike the Pareto/NBD MCMC sampler
+   below, this optimization is cheap (a few hundred iterations over a
+   3-parameter objective) and was ported to C++ directly rather than
+   deferred to Python — see
+   `docs/superpowers/plans/2026-09-26-clv-conformal-cpp-port.md` for the
+   implementation, which validated the from-scratch Nelder-Mead port
+   against SciPy's answer on a real cohort (agreement to ~1e-14 relative,
+   i.e. both implementations land on effectively the same point).
 4. **Interval calibration**: conformal calibration logic
    ([src/conformal.py](../../../src/conformal.py)) is ported to C++
    (order-statistic based, not iterative).
