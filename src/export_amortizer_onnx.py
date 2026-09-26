@@ -58,6 +58,7 @@ def export_mlp_onnx(am: dict, path) -> None:
     if n_outputs > 1:
         graph = onnx_model.graph
         output_name = graph.output[0].name
+        patched = False
         for node in graph.node:
             if node.op_type == "Reshape" and output_name in node.output:
                 shape_input_name = node.input[1]
@@ -65,6 +66,29 @@ def export_mlp_onnx(am: dict, path) -> None:
                     if init.name == shape_input_name:
                         new_shape = np.array([-1, n_outputs], dtype=np.int64)
                         init.CopyFrom(numpy_helper.from_array(new_shape, name=init.name))
+                        patched = True
+        if not patched:
+            # The workaround above assumes the specific graph shape produced
+            # by skl2onnx's convert_sklearn_mlp_regressor as of skl2onnx
+            # 1.20.0 (a single Reshape node feeding the graph output, with a
+            # [-1, 1] int64 shape initializer as its second input). pyproject
+            # pins skl2onnx>=1.16.0 with no upper bound, so a newer/older
+            # version could change this graph shape (e.g. fix the bug
+            # natively, or restructure the Reshape). Silently leaving the
+            # output as [batch * n_outputs, 1] would produce an
+            # internally-consistent-looking but WRONG-shaped ONNX file that
+            # onnx.checker and onnxruntime both load without error — fail
+            # loudly instead so this doesn't ship as silent data corruption
+            # for the C++ consumer.
+            raise RuntimeError(
+                "export_mlp_onnx: could not find the expected Reshape node/"
+                "shape-initializer pattern to patch the multi-output MLP's "
+                "output shape from skl2onnx's export. This workaround "
+                "assumes the graph structure produced by skl2onnx==1.20.0's "
+                "convert_sklearn_mlp_regressor; if skl2onnx was "
+                "upgraded/downgraded, its output-reshape behavior may have "
+                "changed and this function needs to be revisited."
+            )
         graph.output[0].type.tensor_type.shape.dim[1].dim_value = n_outputs
 
     Path(path).write_bytes(onnx_model.SerializeToString())
