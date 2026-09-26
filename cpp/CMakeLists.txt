@@ -37,7 +37,10 @@ target_link_libraries(amortized_inference PUBLIC
 )
 
 add_executable(main src/main.cpp)
-target_link_libraries(main PRIVATE amortized_inference)
+target_link_libraries(main PRIVATE amortized_inference nlohmann_json::nlohmann_json)
+target_compile_definitions(main PRIVATE
+    PROJECT_MODELS_DIR="${CMAKE_SOURCE_DIR}/../models"
+)
 
 enable_testing()
 add_executable(unit_tests
