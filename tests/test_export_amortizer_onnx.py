@@ -25,3 +25,26 @@ def test_export_scalers_writes_expected_json(tmp_path):
     assert len(data["y_mean"]) == 4
     assert data["x_mean"] == am["xs"].mean_.tolist()
     assert data["y_scale"] == am["ys"].scale_.tolist()
+
+
+import numpy as np
+import onnxruntime as ort
+
+from export_amortizer_onnx import export_mlp_onnx
+
+
+def test_export_mlp_onnx_matches_sklearn_predict(tmp_path):
+    am = train_amortizer(seed=0, n_cohorts=50)
+    out_path = tmp_path / "mlp.onnx"
+    export_mlp_onnx(am, out_path)
+
+    rng = np.random.default_rng(0)
+    x_scaled = rng.normal(size=(5, 11)).astype(np.float32)
+
+    expected = am["mlp"].predict(x_scaled.astype(np.float64))
+
+    sess = ort.InferenceSession(str(out_path))
+    input_name = sess.get_inputs()[0].name
+    actual = sess.run(None, {input_name: x_scaled})[0]
+
+    np.testing.assert_allclose(actual, expected, rtol=1e-3, atol=1e-4)
