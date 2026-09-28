@@ -31,9 +31,24 @@ paper/*.log
 paper/*.out
 paper/*.toc
 paper/*.synctex.gz
+paper_gear2/*.aux
+paper_gear2/*.bbl
+paper_gear2/*.blg
+paper_gear2/*.fdb_latexmk
+paper_gear2/*.fls
+paper_gear2/*.log
+paper_gear2/*.out
+paper_gear2/*.toc
+paper_gear2/*.synctex.gz
 
 # Research manuscripts — the paper is a separate deliverable, kept out of the code repo.
 paper/
+paper_gear2/
+
+# Downloaded third-party papers — copyrighted PDFs, not ours to redistribute via the repo.
+deep_research/essentials_papers/
+deep_research/essentials_papers.zip
+deep_research/reading_path_papers.zip
 
 # Large datasets — fetch locally via src/datasets.py; too big for the repo (GitHub caps at 100 MB).
 # The small CDNow/Grocery benchmark files under data/ are kept.
@@ -41,6 +56,9 @@ data/dunnhumby/
 data/olist/
 data/tafeng/
 data/online_retail_II.csv
+data/x5/
+retailhero-uplift.zip
+archive.zip
 
 # Upload bundle — a build artifact / duplicate of the repo, not source.
 github_upload_bundle/
