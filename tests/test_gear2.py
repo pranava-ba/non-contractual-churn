@@ -128,6 +128,7 @@ def test_structural_btyd_cate_shape_and_direction():
 
 
 def test_conformal_ite_intervals_are_ordered_and_reasonably_calibrated():
+    pytest.importorskip("lightgbm", reason="lightgbm not installed (optional causal extra)")
     from uplift_estimators_ext import conformal_ite
     from run_uplift_study import features, _rf_reg
     df = _sim(structure="heterogeneous", assignment="randomized", delta=0.5, seed=5)
@@ -241,6 +242,7 @@ def test_oracle_policy_value_matches_run_uplift_study():
 
 
 def test_dr_policy_value_matches_dunnhumby_formula_and_recovers_truth():
+    pytest.importorskip("lightgbm", reason="lightgbm not installed (optional causal extra)")
     from prescriptive import dr_policy_value, fit_dr_nuisances
     from run_uplift_dunnhumby import dr_values
     rng = np.random.default_rng(1)

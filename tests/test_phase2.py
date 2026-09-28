@@ -67,6 +67,7 @@ def test_amortized_features():
 
 
 def test_clv_features_and_ziln():
+    pytest.importorskip("torch", reason="torch not installed (optional deep-ZILN dependency)")
     from clv_benchmark import clv_features, ziln_clv_predict
     rng = np.random.default_rng(0)
     df = simulate_dataset(DatasetParams(0.2, 1.2, 0.1, 1.0, N=150, T=52.0), rng=rng)
