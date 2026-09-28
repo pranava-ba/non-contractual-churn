@@ -46,7 +46,7 @@ target_include_directories(amortized_inference PUBLIC include)
 target_link_libraries(amortized_inference PUBLIC
     onnxruntime::onnxruntime
     nlohmann_json::nlohmann_json
-    Arrow::arrow_shared
+    "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>"
     "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,ArrowCompute::arrow_compute_static,ArrowCompute::arrow_compute_shared>"
 )
 

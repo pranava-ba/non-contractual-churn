@@ -10,6 +10,7 @@
 #include <charconv>
 #include <cmath>
 #include <ctime>
+#include <iomanip>
 #include <map>
 #include <sstream>
 
@@ -32,9 +33,17 @@ RawTable LoadRawTable(const std::string& path) {
     auto convert_options = arrow::csv::ConvertOptions::Defaults();
     convert_options.column_types["customer_id"] = arrow::utf8();
     convert_options.column_types["transaction_date"] = arrow::timestamp(arrow::TimeUnit::SECOND);
+    // Force amount to float64 rather than leaving it to Arrow's own type
+    // inference: a whole-dollar CSV (e.g. "10", not "10.0") would otherwise
+    // infer int64, and a malformed value (e.g. "$10.00") would infer utf8 --
+    // either way DedupSameDay's static_pointer_cast<DoubleArray> on that
+    // column would be undefined behavior. column_types only applies to
+    // columns that actually exist in the file (see the missing-column
+    // tests), so this is safe to set unconditionally even when the CSV has
+    // no "amount" column at all. A CSV with genuinely non-numeric amount
+    // data now fails here, in Read(), as an IngestError.
+    convert_options.column_types["amount"] = arrow::float64();
     convert_options.timestamp_parsers = {arrow::TimestampParser::MakeISO8601()};
-    // amount's type (if present) is left to Arrow's own inference (float64
-    // for numeric columns); we only need to know whether it exists.
 
     auto reader_result = arrow::csv::TableReader::Make(
         arrow::io::default_io_context(), *file_result, read_options, parse_options, convert_options);
@@ -103,12 +112,30 @@ struct DedupedRow {
 
 std::vector<DedupedRow> DedupSameDay(const std::shared_ptr<arrow::Table>& sorted, bool has_monetary) {
     auto combined = sorted->CombineChunks().ValueOrDie();
-    auto cust_col = std::static_pointer_cast<arrow::StringArray>(combined->column(0)->chunk(0));
-    auto date_col = std::static_pointer_cast<arrow::TimestampArray>(combined->column(1)->chunk(0));
+    const auto& schema = combined->schema();
+
+    // Resolve columns by name, not position: a real uploaded CSV controls
+    // its own column order (e.g. "transaction_date,customer_id,amount"),
+    // which would otherwise pass column-presence validation but then
+    // reinterpret the wrong Arrow array type here -- undefined behavior.
+    int cust_idx = schema->GetFieldIndex("customer_id");
+    int date_idx = schema->GetFieldIndex("transaction_date");
+    auto cust_col = std::static_pointer_cast<arrow::StringArray>(combined->column(cust_idx)->chunk(0));
+    auto date_col = std::static_pointer_cast<arrow::TimestampArray>(combined->column(date_idx)->chunk(0));
+    if (cust_col->null_count() > 0) {
+        throw IngestError("transaction log has a missing/empty customer_id value");
+    }
+    if (date_col->null_count() > 0) {
+        throw IngestError("transaction log has a missing/empty transaction_date value");
+    }
+
     std::shared_ptr<arrow::DoubleArray> amount_col;
     if (has_monetary) {
-        int amount_idx = combined->schema()->GetFieldIndex("amount");
+        int amount_idx = schema->GetFieldIndex("amount");
         amount_col = std::static_pointer_cast<arrow::DoubleArray>(combined->column(amount_idx)->chunk(0));
+        if (amount_col->null_count() > 0) {
+            throw IngestError("transaction log has a missing/empty amount value");
+        }
     }
 
     std::vector<DedupedRow> out;

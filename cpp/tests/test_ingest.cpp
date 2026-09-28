@@ -66,6 +66,33 @@ TEST_CASE("ingest_csv matches the Python golden file (default as_of)", "[ingest]
     }
 }
 
+TEST_CASE("ingest_csv matches the Python golden file (shuffled row order)", "[ingest][golden]") {
+    // ingest_sample.csv is already sorted by customer-then-date, with the
+    // same-day duplicate rows already adjacent -- so it never actually
+    // exercises SortByCustomerThenDate. This fixture has the identical rows
+    // in scrambled order (customers interleaved, the two same-day duplicate
+    // rows for customer A separated by other customers' rows), and its
+    // acquisition-row amount for A is written as "10" (not "10.0") to also
+    // exercise the amount column being forced to float64 regardless of
+    // whether the CSV happens to write whole numbers with a decimal point.
+    auto features = pareto_nbd::ingest_csv(std::string(PROJECT_MODELS_DIR) + "/ingest_sample_shuffled.csv");
+
+    std::ifstream f(std::string(PROJECT_MODELS_DIR) + "/ingest_golden.json");
+    nlohmann::json golden;
+    f >> golden;
+
+    REQUIRE(features.has_monetary);
+    REQUIRE(features.customer_id.size() == golden["customers"].size());
+
+    for (const auto& c : golden["customers"]) {
+        size_t i = index_of(features, c["cust"].get<std::string>());
+        REQUIRE(features.x[i] == Catch::Approx(c["x"].get<double>()).epsilon(1e-9));
+        REQUIRE(features.t_x[i] == Catch::Approx(c["t_x"].get<double>()).epsilon(1e-9));
+        REQUIRE(features.T_cal[i] == Catch::Approx(c["T_cal"].get<double>()).epsilon(1e-9));
+        REQUIRE(features.m_bar[i] == Catch::Approx(c["m_bar"].get<double>()).epsilon(1e-9));
+    }
+}
+
 TEST_CASE("ingest_csv matches the Python golden file (explicit as_of)", "[ingest][golden]") {
     std::ifstream f(std::string(PROJECT_MODELS_DIR) + "/ingest_golden_as_of.json");
     nlohmann::json golden;

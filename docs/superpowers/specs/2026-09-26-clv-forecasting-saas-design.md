@@ -68,8 +68,14 @@ nlohmann/json) are used directly; no separate ORM layer.
 ### 4.3 Worker — C++
 Picks jobs off the Redis queue and runs the estimation pipeline:
 1. **Ingestion**: Apache Arrow C++ reads the uploaded CSV and computes
-   per-customer RFM features (frequency, recency, T, monetary value) via
-   Arrow's group-by/aggregate compute functions. This is the stage that
+   per-customer RFM features (frequency, recency, T, monetary value). Arrow's
+   `SortIndices`/`Take` compute functions sort the parsed table by
+   `(customer_id, transaction_date)` so each customer's rows land contiguous
+   and date-ordered; the per-customer rolling stats (first/last date, repeat
+   count, summed same-day spend) are then produced by a hand-written linear
+   scan over that sorted table rather than Arrow's `Aggregate` API, which is
+   built for simple reductions like sum/count/mean per group and not the
+   multi-field "first/last/count" logic this needs. This is the stage that
    has to handle scale, hence Arrow rather than a hand-rolled parser.
 2. **Fast-path estimation**: the existing amortized neural Pareto/NBD
    estimator ([src/amortized.py](../../../src/amortized.py)) continues to be
