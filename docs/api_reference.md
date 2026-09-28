@@ -171,3 +171,49 @@ Returns ECE and Brier score.
 
 ### `compare_churn(df, horizon, test_frac=0.3, seed=0, mcmc_draws=1500)`
 BTYD `P(active)` versus a boosted classifier.
+
+---
+
+## Gear 2 — prescriptive / causal-ML
+
+**Separate future paper** from Phase 2 above, not part of it. Turns the calibrated BTYD state into
+targeting decisions via causal uplift (CATE). See [prescriptive BTYD](uplift.md).
+
+## Module: `simulate_intervention`
+
+### `simulate_intervention(params, cfg, rng=None)`
+Semi-synthetic DGP: extends the Pareto/NBD simulator with a retention treatment `T` and returns
+ground-truth CATE (`cate_count`, `cate_active`, `cate_clv`) alongside the noisy factual outcome an
+estimator would actually see.
+
+### `InterventionConfig(target=, structure=, delta=, assignment=, ...)`
+Parameterises the intervention: what it shifts (`mu`/`lambda`/`both`), effect heterogeneity
+(`homogeneous`/`heterogeneous`/`sleeping_dogs`), magnitude, and assignment mechanism
+(`randomized`/`confounded`).
+
+## Module: `prescriptive`
+
+The `paretonbd` prescriptive API. See [prescriptive BTYD](uplift.md) for the full write-up.
+
+### `estimate_uplift(X, T, Y, Xte, method="causal_forest", library="econml", alpha=0.10, seed=0)`
+Fits a CATE estimator (T/X/DR-learner or causal-forest DML, econml or causalml) and returns
+`(cate_hat, ci_or_None)` on `Xte`.
+
+### `target_policy(score, margin=None, cost=None, budget=None)`
+Binary targeting decision: a `margin*score - cost > 0` threshold policy, or a budget-constrained
+top-k policy.
+
+### `fit_dr_nuisances(Xtr, Ttr, Ytr, Xte)` / `dr_policy_value(pi, T, Y, ehat, m1hat, m0hat)`
+Doubly-robust policy value for observational (confounded) real data.
+
+### `oracle_policy_value(score, cate_true, budget=0.30)`
+Captured true-CATE as a fraction of the oracle's, at a budget — synthetic ground-truth validation
+only (Stage A).
+
+### `qini_auc(y, uplift, treatment)` / `qini_curve(y, uplift, treatment)`
+Targeting quality on randomized real data (thin `scikit-uplift` wrappers).
+
+### `structural_btyd_cate(df_tr, df_te, horizon, outcome="clv")` / `conformal_ite(Xtr, Ttr, Ytr, Xte, base_reg, alpha=0.10)`
+Re-exported from `uplift_estimators_ext` — the model-based BTYD uplift and the split-conformal ITE
+interval repair. Note their data contracts differ from `estimate_uplift`'s generic `(X, T, Y)`; see
+their own docstrings.

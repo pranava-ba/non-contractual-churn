@@ -9,6 +9,368 @@ All notable changes to this project are documented here. The format is based on
 <!-- Dated development log: a running record of what was done each session (newest first),
      alongside the usual Keep-a-Changelog release notes grouped within each day. -->
 
+### 2026-09-25 — research-paper-tracker: full review + rework, new Coverage page
+- **Full read-through of `research-paper-tracker/`** (`src/`, `tools/curate.py`,
+  `tools/genealogy/`, the three config files, the GUI) produced 16 findings — correctness
+  bugs (partial API results discarded on a rate-limit failure; a bad category config
+  aborting the whole run and skipping `record_run`; lossy cross-source dedup that
+  picked one whole record instead of merging complementary fields; permanent duplicate
+  rows when a preprint later gets a DOI), recall gaps (no abstract backfill; no use of
+  OpenAlex's own topic `concepts`; hand-drifted OpenAlex/Crossref query text per
+  category), zero test coverage, no config validation, and downloader/housekeeping
+  items (no direct Unpaywall query; a silently-swallowed Sci-Hub failure reason;
+  unpinned `lxml`). All 16 implemented:
+  - `src/config.py`: upfront validation (`ConfigError`) for `settings.yaml`/
+    `categories.yaml`/`journals.yaml` — a typo now fails before any API call, not as a
+    bare `KeyError` mid-run.
+  - `src/sources/openalex.py` + `arxiv.py`: paging keeps already-fetched pages on a
+    later rate-limit failure instead of discarding them; jittered backoff; per-module
+    `CALLS_MADE` counters; OpenAlex now also fetches `concepts` (topic tags) as a
+    secondary relevance signal; arXiv gained proper `date_to` bounding.
+  - `src/sources/semanticscholar.py` (new): best-effort abstract backfill by DOI/arXiv
+    id when both OpenAlex and Crossref return none — a title-only record otherwise
+    silently weakens `match.py`'s scoring.
+  - `src/run.py`: per-category try/except (isolated like feed errors already were);
+    an in-run feed-result cache so identical `(source,mode,query,window)` requests
+    aren't re-fetched; `_merge()` replaces the old all-or-nothing `_better()` pick when
+    the same paper arrives via two feeds; the `min_publication_date` floor is now
+    enforced on every run, not just the first; an end-of-run API-call budget report
+    against the documented shared OpenAlex daily limit.
+  - `src/downloader.py`: Unpaywall queried directly by DOI as a tier between
+    OpenAlex's cached OA link and Sci-Hub; the Sci-Hub failure's root-cause exception
+    is now logged (debug level) instead of silently swallowed.
+  - `tools/curate.py`: new `--dedupe-check` (audit-only, `possible_duplicates.csv`) —
+    normalized-title matching across different `uid`s (e.g. an arXiv preprint later
+    reached again via a DOI source), never auto-merged.
+  - `config/categories.yaml`: fixed the OpenAlex/Crossref query-text drift per
+    category (the same class of bug behind the earlier RFM scope-leak) — broadened
+    Crossref's wording to match OpenAlex's, safe because `require_all` still gates
+    admission either way.
+  - **Tests, from zero:** `pytest.ini` + `conftest.py` + `tests/` (config, match/rank,
+    store incl. new tables, the `.bib` parser, the refresh-window calc, `_merge`), plus
+    `tests/test_golden_set.py` — representative (not real-text) fixtures per live
+    category, including the exact bare-RFM+clustering and pure-contractual-churn
+    near-misses that caused the earlier incident, so a future silent term-drift edit
+    fails a test instead of costing another manual curation pass. 44/44 passing.
+  - `requirements.txt`: pinned `lxml` (feedparser's more robust XML backend).
+- **New: the Coverage page** (third GUI tab), the reason for the rework — a single
+  board split into the two research tracks via each category's new `group:` field
+  (`nbd` / `causal`), listing every tracked paper once with three independent flags:
+  **Read** (skim), **Analyzed** (a new `paper_state.analyzed` column — deep-dived, not
+  just skimmed), and **Used** — auto-detected by cross-referencing the paper's DOI/
+  arXiv id/normalized title against that track's manuscript `.bib`
+  (`paper/refs_phase2.bib` for nbd, `paper_gear2/refs_gear2.bib` for causal; new
+  `src/citations.py`, a small brace-aware parser, no new dependency), with a manual
+  3-state override (`paper_state.used_override`) for anything that doesn't clean
+  DOI/title-match. Verified end-to-end against both real `.bib` files (40 + 17 entries
+  parsed clean) and against a throwaway DB: a real cited DOI correctly badges
+  "Used ✓", an uncited one doesn't.
+- Schema additions (`src/store.py`, migrated in-place, no data loss): `paper_state.
+  analyzed`, `paper_state.used_override`, `paper_aliases` (dedupe-check's output,
+  read-only for now), `api_calls` (the budget tracking table).
+
+### 2026-09-21 (same day, later — X5 RetailHero landed: the sharpest confirmation of the three)
+- **The author supplied the X5 RetailHero competition data directly** (`retailhero-uplift.zip`,
+  4.5GB compressed; extracted `clients.csv`/`uplift_train.csv`/`purchases.csv` — a 45.8M-row
+  transaction log — into `data/x5/`, added to `.gitignore` along with the source zips). Schema
+  matched exactly what `src/run_uplift_x5.py` was written to expect ahead of time (200,039
+  clients, randomized 50/50 `treatment_flg`, binary `target`) — the script ran with **zero code
+  changes**.
+- **Result: the sharpest of the three real-data confirmations.** Every uplift estimator scores
+  clearly positive Qini AUC (X-learner 0.0109, causal-forest 0.0107, T-learner 0.0096, consistent
+  across all 3 seeds individually) while **predicted-value targeting is negative on every single
+  seed** ($-0.0058$, $-0.0084$, $-0.0076$) — worse than an uninformed random policy (Qini
+  $\approx 0$, sanity check passes), not merely worse than uplift. A real-data instance of the
+  *synthetic* sleeping-dogs pathology (random beats value-targeting once negative-effect customers
+  are in the mix), except emerging from real customer behavior rather than a designed DGP feature.
+  `results/gear2_x5_summary.csv` written.
+- **Caught and fixed a transcription error** while writing this up: an early draft of the
+  `GEAR2_STAGE_A_RESULTS.md` table had the X-learner/causal-forest Qini values swapped relative to
+  the actual script output — corrected before it propagated into the paper.
+- **All markdown drafts + the LaTeX manuscript updated** with the real numbers: `results.md` (new
+  Table 9 + prose), `introduction.md` (contribution #5), `discussion.md` (Fourth finding +
+  Limitations, including a new honest caveat that X5's outcome is binary purchase, not a monetary
+  metric, so it corroborates the ranking claim but not a value-specific one), `abstract.md`.
+  `src/make_gear2_figures.py`'s `fig_real_data()` extended to a 3-panel figure (X5's panel shows
+  the negative-value-targeting bar crossing zero). **All PLACEHOLDER markers in
+  `manuscript_gear2.tex` resolved** — recompiles clean: 21 pages (was 20), 0 undefined
+  references/citations, 0 BibTeX warnings. Full test suite still 61/61 passing.
+
+### 2026-09-21 (later session — LaTeX'd into a compiling rough manuscript)
+- **`paper_gear2/manuscript_gear2.tex`** — assembled all five markdown drafts into a single-file
+  Springer sn-jnl (sn-basic, author-year) manuscript, mirroring `paper/manuscript_phase2.tex`'s
+  build convention but fully self-contained (own `.cls`/`.bst` copies, own bib, own figures dir).
+  8 booktabs tables, 4 figures (copied from `results/figures_gear2/`), cross-references throughout
+  (`\ref`/`\label`) instead of the markdown drafts' prose section pointers.
+- **`paper_gear2/refs_gear2.bib`** — 17 entries, every one verified against a primary source
+  (publisher DOI page, arXiv abstract page, or — for the closest-comparator paper — the article's
+  own Dublin Core / citation metadata fetched directly, after a search-engine-synthesized author
+  attribution looked unreliable and was independently confirmed rather than trusted) before being
+  entered. No fabricated bibliographic details.
+- **Compiles clean via `latexmk -pdf manuscript_gear2.tex`**: 20 pages, 0 undefined references or
+  citations, 0 BibTeX warnings. Fixed one BibTeX cosmetic bug along the way (`arXiv:2603.22900` /
+  `arXiv:2406.01933` were losing their decimal point when embedded in a `journal` field with no
+  volume/number/pages set — moved to a `note` field, which resolved it).
+- sn-jnl/Springer used here as a **working template only** — venue remains explicitly deferred
+  (`GEAR2_ROADMAP.md §7` item 6). `outline.md` updated with the concrete "what's left" list:
+  fill the X5 placeholder (3 grep-able spots), a cover-to-cover proofread of the assembled PDF, an
+  abbreviations/notation appendix + disclaimer block, minor LaTeX polish, a submission-day novelty
+  re-sweep, then the venue decision.
+
+### 2026-09-21 (later session — full first-pass draft complete: Introduction, Discussion, Abstract)
+- **`paper_gear2/introduction.md`** — Introduction (the prediction-vs-decision gap, the four
+  customer-type framing, a 5-item contributions list citing the real headline numbers) and Related
+  Work (causal-ML/uplift lineage, the calibration-of-effects lineage, and the novelty re-sweep's
+  lead-comparator differentiation against the structural-Bayesian endogenous-CLV paper, folded in
+  as prose rather than left as a bullet list).
+- **`paper_gear2/discussion.md`** — Discussion (§6.1 summary of the four findings, §6.2 a concrete
+  managerial decision rule, §6.3 methodological implications incl. the budget-matched-comparison
+  lesson learned from this session's own Dunnhumby cost-sweep correction) and Conclusion.
+- **`paper_gear2/abstract.md`** — written last, per the paper's own draft order.
+- **Result: a complete first-pass draft** across all five files (`methods.md`, `results.md`,
+  `introduction.md`, `discussion.md`, `abstract.md`). One placeholder threads through Results
+  Part IV / Discussion §6.4 / the Abstract for X5's pending numbers — explicitly marked in each
+  location, not fabricated. `GEAR2_ROADMAP.md` and `outline.md` updated to track what's left: fill
+  the X5 placeholder (or defer it explicitly), a cross-file consistency proofread, then the venue
+  decision (still last).
+
+### 2026-09-21 (later session — Results section drafted)
+- **`paper_gear2/results.md`** — all five Results parts drafted, sourced to
+  `GEAR2_STAGE_A_RESULTS.md`/the CSVs, mirroring `methods.md`'s notation: Part I (prediction≠
+  decision, Tables 1-2, the −58.1× oracle sleeping-dogs finding + the δ-sweep stability check),
+  Part II (the three-tool regime map, Table 3, + the econml≡causalml library bake-off), Part III
+  (calibration of the effect, Table 4, the 1,200-tree coverage confirmation + conformal repair),
+  Part IV (external validity — Dunnhumby DR incl. the new cost-sweep table and its corrected
+  "budget-matched comparison" framing, Hillstrom Qini, and an honest **placeholder** for X5 since
+  its data isn't downloaded yet — not fabricated), Part V (the RFM-vs-BTYD-state ablation). Cross-
+  checked the specific numeric claims made in prose (the ~2× causal-forest-vs-meta-learner rank
+  gap, the $225/0.7=$322 crossover, the sleeping-dogs random-beats-value ordering) against source
+  data before writing them.
+
+### 2026-09-21 (later session — title, X5, per-contact cost, novelty re-sweep)
+Four author decisions actioned in one pass:
+- **Title confirmed:** *"Deus Ex Machina: Calibrated Causal Targeting on the Buy-Till-You-Die
+  State."* Updated in `paper_gear2/outline.md` and `methods.md`.
+- **X5/RetailHero: include.** `sklift.datasets.fetch_x5(download_if_missing=True)` confirmed
+  hanging on the login redirect (45s timeout, no partial download). Wrote
+  `src/run_uplift_x5.py` — a ready-to-run ingestion + Qini-scoring script (mirrors
+  `run_uplift_hillstrom.py`'s randomized-assignment evaluation), with column-alias handling
+  across competition-data revisions and a clear `FileNotFoundError` pointing to the setup steps
+  (register at ods.ai, unzip into `data/x5/`). Blocked only on the manual download itself.
+- **Per-contact cost added to the Dunnhumby comparison.** `dr_values()` (`run_uplift_dunnhumby.py`)
+  and `prescriptive.dr_policy_value` both gained a `cost=` parameter (default 0.0, backward
+  compatible) charged per contacted customer. Re-ran the full cost sweep
+  (`cost ∈ {0,1,2,5,10,20,50,100}`) → `results/gear2_dunnhumby_cost_summary.csv`. **Finding
+  (reframes the original hope in §4.3):** treat-all does not flip to losing within any realistic
+  cost — the crossover is ≈$322/household — because treat-all (100% contacted) vs. a 30%-budget
+  policy was never a fair, budget-matched comparison. The defensible claim is the budget-matched
+  one: uplift beats value and random at *every* cost level, by construction (shared cost term
+  doesn't change a ranking). `GEAR2_STAGE_A_RESULTS.md §4.1` updated with the real table and the
+  corrected framing. 2 new tests in `tests/test_gear2.py` (61/61 passing).
+- **Novelty re-confirmed via a bounded 11-search deep dive.** New
+  `deep_research/GEAR2_NOVELTY_RESWEEP.md`. Verdict: holds. Found one closely-adjacent paper (a
+  structural-Bayesian CLV-under-endogenous-marketing paper covering Pareto/NBD + BG/NBD +
+  heterogeneous effects — the closest prior work, now the lead Related-Work citation with an
+  explicit differentiation paragraph) and ~6 further must-cite-but-not-competing papers (the
+  CATE-calibration lineage: Xu & Yadlowsky 2022, isotonic/orthogonal causal calibration; causal
+  survival forests and 2026 survival off-policy evaluation, flagged as a named censoring
+  limitation; a concurrent KDD 2026 semi-synthetic structural-bias uplift-evaluation paper).
+  `CAUSAL_ML_LITERATURE.md §6` and `outline.md`'s Related Work section updated accordingly.
+
+### 2026-09-21 (later session — DGP bug fix + paretonbd prescriptive module)
+- **Fixed the `simulate_intervention.py` clip-floor bug** flagged (not fixed) in the earlier
+  2026-09-21 session: `mu1`/`lam1` were floor-clipped at an absolute `1e-4`, which could exceed
+  `mu0*(1-eff)` for the rare customer whose drawn `mu0` was already below that floor (the Gamma(mu)
+  heterogeneity tail runs down to ~1e-7), inverting the treatment's direction for that customer.
+  Fixed by flooring at a genuine underflow guard (`1e-9`) instead of an absolute value that could
+  exceed the intended shifted rate — `eff` is already clipped to (-0.95, 0.95) upstream, so the
+  multiplicative transform is provably positive and bounded away from zero on its own.
+  - Added 2 regression tests to `tests/test_gear2.py`: a strict zero-negative-CATE invariant for
+    the homogeneous case (was a >0 tolerance before, to accommodate the bug), and an explicit sweep
+    over 8 seeds confirming customers with `mu0 < 1e-4` no longer get an inverted-direction CATE.
+    Full suite: 55/55 passing.
+  - **Spot-checked, not fully re-run:** re-ran the exact delta=0.5/5-seed/12-family subset the
+    published `results/gear2_uplift_summary.csv` aggregates are drawn from (60 cells, 660 rows,
+    to a scratch file, not overwriting the published CSV) and compared head to head. Differences
+    are noise-level and every headline ordering is unchanged (causal methods still best;
+    value-targeting still ~-55x oracle under sleeping dogs; uplift > value > random throughout).
+    **`GEAR2_STAGE_A_RESULTS.md` and the published CSVs stand as-is — no full factorial re-run.**
+- **Built the `paretonbd` prescriptive module** (`src/prescriptive.py`, Gear 2 roadmap §3 item 20)
+  per the user's explicit choice to do this now rather than defer it (unlike Gear 1's analogous
+  package API, which stays deferred). Consolidates the Stage A/B estimator and policy-evaluation
+  code behind a stable, tested, documented API: `estimate_uplift` (T/X/DR-learner + causal-forest
+  dispatch across econml/causalml), `target_policy` (margin/cost threshold or budget-constrained
+  top-k), `dr_policy_value` + `fit_dr_nuisances` (the Dunnhumby doubly-robust logic, generalized),
+  `oracle_policy_value` (the Stage-A ground-truth check), `qini_auc`/`qini_curve` (thin
+  scikit-uplift wrappers), plus re-exports of `structural_btyd_cate`/`conformal_ite`. Documented in
+  `docs/api_reference.md` and `docs/uplift.md`; tests in `tests/test_gear2.py`.
+
+### 2026-09-21 (Gear 2 engineering debt: deps, tests, figures, docs)
+- **Closed out the remaining Gear 2 engineering items** flagged in `GEAR2_ROADMAP.md` (A0's pin
+  sub-item, A9). This is bounded engineering catch-up on the already-complete Stage A/B research,
+  not new research: no new findings, just tests/figures/docs/deps for what was already built.
+  - **Pinned deps** — new `causal` optional-dependency group in `pyproject.toml` (econml, causalml,
+    lightgbm, xgboost, shap, scikit-uplift, joblib), matching the versions smoke-tested 2026-09-20.
+  - **`tests/test_gear2.py`** — 12 fast, deterministic tests: `simulate_intervention` (shapes,
+    dead-at-T customers get zero CATE, randomized-vs-confounded bias, the sleeping-dogs negative
+    segment vs. a small numerical floor-clip artefact in the homogeneous case — see below), both
+    novelty estimators (`structural_btyd_cate`, `conformal_ite`), the harness's pure functions
+    (`features`, `policy_pct_oracle`), and `run_uplift_dunnhumby.dr_values` (recovers the true
+    policy value exactly when nuisances are correct, on a synthetic check). A 13th test smoke-fits
+    `fit_estimators` end-to-end, skipped if the `causal` extra isn't installed. Full suite
+    (54 tests, incl. the 42 Phase 2 tests) passes.
+  - **Found (not fixed) a minor DGP edge case:** in `simulate_intervention.py`, `mu1` is clipped to
+    a floor of `1e-4`; for the rare customer whose drawn `mu0` is already below that floor, the
+    clip can invert the direction of a positive-delta (mu-lowering) treatment for that customer
+    specifically — a tiny-magnitude artefact (~3.8% of alive customers, mean effect ≈ -0.015 vs. a
+    typical ATE ≈ 0.11 at N=1500), unrelated to the real, large, by-design sleeping-dogs negative
+    segment (mean ≈ -0.53). Very unlikely to affect the already-reported Stage A aggregates
+    (N=6000, 10-15 seeds per cell), but not silently patched here since Stage A's results are
+    already finalized in `GEAR2_STAGE_A_RESULTS.md` — flagged for the author to decide whether it's
+    worth a follow-up fix + re-run before the Gear 2 paper is written.
+  - **`src/make_gear2_figures.py`** — 4 figures to `results/figures_gear2/` (kept OUT of
+    `paper/figures/`, since Gear 2 is a separate paper from the Phase 2 manuscript): the headline
+    prediction≠decision policy-value-by-structure chart, the calibration-repair chart (coverage90,
+    causal-forest vs. conformal-ITE, randomized vs. confounded), the Dunnhumby+Hillstrom real-data
+    validation panel, and the RFM-vs-BTYD-state feature-ablation chart.
+  - **`docs/uplift.md`** — monograph-style doc (mirrors `docs/conformal.md`) summarizing the module,
+    API, Stage A+B findings, and reproduce commands; explicitly scoped as Gear 2 / a separate future
+    paper, not part of the Phase 2 submission.
+  - **`GEAR2_ROADMAP.md` updated** to mark A0/A9 done and Stage B's auto-fetchable portion complete
+    (it previously only said this in `CHANGELOG.md`/`ACTION_BOARD.md`, not in the roadmap doc
+    itself). Remaining Gear 2 items are now all 🧑/paper-scale (X5 manual download, the `paretonbd`
+    prescriptive module, drafting the paper) — not further bounded engineering tasks.
+- **Started the Gear 2 paper** (`paper_gear2/`, deliberately separate from `paper/`'s Phase 2
+  submission) — `outline.md` (full skeleton + results-to-asset map, mirroring
+  `paper/phase2_outline.md`'s "skeleton first, every number sourced" convention) and `methods.md`
+  (the full Methods section: the prediction-vs-decision framing, the intervention DGP + the
+  2026-09-21 clip-floor fix noted inline, the three estimator families, the policy layer, and the
+  evaluation metrics — all sourced to `GEAR2_STAGE_A_RESULTS.md`/`gear2_*_summary.csv`). Flagged 5
+  open author decisions in `outline.md §3` (title, venue, X5 inclusion, Dunnhumby per-contact
+  cost, novelty-claim re-sweep) that block Results/Intro/Discussion — did not draft past those
+  without the author's input, per the recommended draft order (Methods → Results → Intro →
+  Discussion → Abstract).
+
+### 2026-09-20 (later session — Gear 2 groundwork: causal-ML corpus, tooling, datasets, coverage)
+- **Gear 2 kickoff (prescriptive/causal-ML phase).** New direction: uplift/CATE on the BTYD state to
+  turn calibrated forecasts into retention *decisions*. Detailed plan in
+  `deep_research/GEAR2_ROADMAP.md` (gates implementation); memory `gear2-causal-roadmap`.
+  - **Env:** installed & smoke-tested **econml 0.17.0 + causalml 0.17.0** on Py 3.13 (causalml built
+    from source; lightgbm 4.7.0 + xgboost 3.4.1 + shap came along — Gear 1 had lacked lgbm/xgb).
+    Smoke test on a known-effect toy DGP: the two libraries agree *exactly* on a matched base learner
+    (rank-corr 1.000); the lever is the estimator (causal-forest DML beat meta-learners ~3× on PEHE).
+- **Causal-ML literature pull** (`deep_research/CAUSAL_ML_LITERATURE.md`) — the Gear 2 analogue of the
+  churn LITERATURE_MATRIX: motivating marketing line (Ascarza 2018 *Retention Futility*; Devriendt
+  *stop predicting churn, use uplift*; Lemmens–Gupta profit churn), estimator taxonomy (S/T/X/R/DR
+  learners, causal forest, DML, uplift trees), policy learning + Qini/RATE, calibration-of-effects
+  (Lei–Candès, Alaa conformal meta-learners) as our differentiator, a reading path, and a provisional
+  novelty position.
+- **Two tooling inventories** — `TOOLING_CAUSAL_ML.md` (econml/causalml/sklift/DoWhy/DoubleML/grf +
+  what we'll use) and `TOOLING_NONCONTRACTUAL.md` (R BTYD/BTYDplus/CLVTools; Py lifetimes→btyd/
+  PyMC-Marketing; the calibration-eval gap; the ML-CLV stack). Prose companions to `tooling_map.mmd`.
+- **Dataset hunt & log** (`deep_research/DATASETS_LOG.md`) — held vs candidate, by industry + uplift
+  (treatment) sets + cross-paper commons + a prioritized add-list. **Key find:** the **Dunnhumby
+  "Complete Journey" set already on disk carries household campaign/coupon treatment**
+  (`campaign_table.csv`, `coupon_redempt.csv`, `causal_data.csv`) — a real treatment variable in hand
+  for Gear 2. `sklift.datasets.fetch_*` gives one-call Hillstrom/Criteo/Lenta/X5/MegaFon.
+- **Tracker extended to causal ML** — added `causal_ml_uplift` + `causal_ml_churn` keyword categories
+  to `config/categories.yaml` (applied-scoped so the HTE firehose can't flood); YAML validated.
+- **Coverage verdict** (ACTION_BOARD §5): re-checked the expanded 3,043-paper corpus + new Tier-A/B
+  finds (Xie 2020/2022, Bauer 2021, Bachmann 2021, Dew 2018, Jasek 2018/19, …). **None evaluate
+  BTYD-vs-ML by calibration → the novelty claim still holds.** Xie is point-accuracy + NN-estimation
+  (which our amortized-inference contribution already covers). Remaining before submission is a
+  **bounded** Related-Work sweep (~8–10 should-cite comparators), not more research.
+- **Manuscript v2.0.11 → v2.0.12 (the bounded sweep, done).** Folded **9 DOI-verified comparators**
+  from the genealogy corpus into Related Work — Xie & Huang (2020) Pareto/NBD-vs-NN, Xie (2022) NN
+  estimation (noted as subsumed by our amortized inference), Bauer & Jannach (2021) seq2seq CLV, Jasek
+  et al. (2018, 2019) probabilistic-CLV comparisons, Chou et al. (2022) BTYD-ML repurchase hybrid, Zhou
+  et al. (2024) cross-domain CLV, Bogaert & Delaere (2023) churn ensembles, Kiyakoglu & Aydin (2024)
+  individual-level assessment. All point-error/accuracy → **novelty claim unchanged and now corroborated
+  on the historical corpus** (added a clause to "The gap, systematically"; 2 new rows in `tab:related`).
+  Bib entries added to `refs_phase2.bib`. **F8 closed as unachievable:** an explicit limitation now
+  states no Indian/emerging-market customer-level non-contractual dataset could be sourced (Data section
+  + Limitations), recorded as an unmet data goal for future revisiting. Recompiles clean via `latexmk`
+  (51 pp, 0 undefined refs; all 9 new keys resolved in the .bbl).
+- **Gear 2 §7 resolved + Stage-A DGP built.** Decisions locked (GEAR2_ROADMAP §7): test *combinations*
+  via a **smart factorial** (full-cross target×structure×assignment = 12 DGP families; OFAT-sweep δ/N;
+  3 outcomes computed jointly; every estimator × both libraries, pick better per task; venue last).
+  **Built `src/simulate_intervention.py`** — the parameterised intervention DGP with **analytic
+  ground-truth CATE** (count/retention/CLV) + noisy factual outcomes. Validated: confounded assignment
+  reproduces naive bias (0.93 vs true 0.21), and the sleeping-dogs structure yields a visible ~19%
+  negative-CATE segment (ATE flips negative) — the regime where uplift beats propensity/value targeting.
+  Weekly-tracker triage workflow recorded in memory (`weekly-tracker-check`).
+- **Gear 2 Stage-A benchmark run + logged.** Built `src/run_uplift_study.py` (parallel, LightGBM base
+  learners — JIT is moot, the compute is in compiled econml/causalml/sklearn) and ran the full smart
+  factorial: **480 cells (12 families × δ{.2,.35,.5,.65} × 10 seeds) × up to 8 methods → 4,320+
+  estimator-evaluations** in `results/gear2_uplift_summary.csv`; results log
+  `deep_research/GEAR2_STAGE_A_RESULTS.md`. **Findings:** (1) *prediction ≠ decision* — value-targeting
+  captures ~0.99 of oracle when effects align with value but **−58× oracle under sleeping dogs**, where
+  causal uplift degrades gracefully (CausalForest best black-box, policy −12); (2) **library bake-off** —
+  econml ≡ causalml on matched learners, so pick by feature (CausalForest/policy-trees/inference →
+  econml); (3) **calibration lens works** — CausalForest intervals overconfident (coverage 0.81 vs 0.90,
+  worse under confounding). Added the two novelty estimators (`src/uplift_estimators_ext.py`):
+  ⭐ **structural BTYD-CATE** (parametric, competitive/better ranking, strong in sleeping-dogs) and
+  ⭐ **conformal-ITE** (restores valid coverage 0.96, the calibration repair). 8-estimator δ-sweep re-run
+  in progress to finalize their aggregates.
+- **Gear 2 Stage A COMPLETE + Stage B started.** Finalized the 8-estimator × 480-cell factorial plus
+  follow-ups (`src/run_uplift_extras.py`): high-tree coverage confirms CausalForest is **genuinely
+  overconfident (0.80 even @1200 trees, worse under confounding)** — not a few-tree artefact — while
+  conformal-ITE holds **0.96** (calibration↔sharpness frontier: conformal regret ~5× CausalForest's);
+  RFM-vs-BTYD-state ablation shows **BTYD-state features immaterial** (RFM already sufficient — echoes
+  Gear 1). Three-tool regime map recorded. **Stage B — Dunnhumby** (`src/run_uplift_dunnhumby.py`):
+  real retailer campaign treatment (2,500 households, pre-treatment RFM → campaign exposure → post
+  spend), evaluated by **doubly-robust policy value** (observational/confounded). **Uplift-targeting
+  beats value-targeting ~4× on incremental value** (+237 vs +62 vs random +181) — value-targeting picks
+  sure-things; the synthetic lesson reproduces in the wild. Full log:
+  `deep_research/GEAR2_STAGE_A_RESULTS.md` §4.
+- **Stage B — Hillstrom done** (`src/run_uplift_hillstrom.py`, via `scikit-uplift`): 64k-customer
+  **randomized** email trial, so **Qini is valid**. Uplift-targeting beats value-targeting **~2× on
+  Qini AUC** (X-learner 0.024 / CausalForest 0.020 vs value 0.012; random ≈0). **Both** real datasets —
+  observational (Dunnhumby/DR) and randomized (Hillstrom/Qini) — confirm the synthetic ordering
+  **uplift > value > random**. X5 RetailHero is login-walled (manual download, user action). Stage B's
+  auto-fetchable portion is complete.
+
+### 2026-09-20
+- **Field genealogy + historical citation tree (origins → present).** Built the field's
+  historical backbone that the 2023+ living tracker sat on top of but never contained.
+  - **Origin narrative** `deep_research/FIELD_GENEALOGY.md` — traces the two lineages
+    ("churn" as a 1990s telecom/contractual coinage vs. the "customer death" / latent-
+    attrition lineage that is our field), from Ehrenberg's 1959 NBD → Schmittlein–Morrison–
+    Colombo 1987 (the founding Pareto/NBD paper) → Reinartz–Kumar 2000 (names "noncontractual")
+    → BG/NBD, Pareto/GGG, BG/BB → the ML turn → the calibration frontier. Includes a lineage
+    diagram and a coverage table.
+  - **Industries map** `deep_research/INDUSTRIES_NONCONTRACTUAL.md` — 26 settings across 7
+    groups, keyed on the *observability of dropout* (retail/FMCG/e-commerce/CPG, hospitality,
+    mobility/platforms, gaming/media, financial/B2B, non-profit donors), with the contractual
+    boundary (telecom/SaaS/insurance) marked as the *other* world.
+  - **Citation tree** — a broad ~1000+ pull (per the "one corpus, broad raw" decision):
+    **3,043 papers / 20,457 edges spanning 1959→2026**, seeds = the field's origins +
+    everything the manuscript cites (38 seeds), expanded backward references (depth 2,
+    relevance-gated) + forward citations of the seeds. Built on **Crossref + OpenCitations**
+    (OpenAlex's keyless daily IP budget is exhausted and its DOI path is budget-blocked;
+    seed resolution picks the *canonical* version, not preprint/report clones).
+  - **Unified corpus** — tracker floor lowered `2023-01-01 → 1959-01-01`; the tree ingested
+    into `tracker.db` (`source='genealogy'`, new `citation_edges` table). DB now **3,223
+    papers, 1825–2026**. Two GUI buckets registered (`foundations`, `genealogy`);
+    `tools/curate.py` patched to **never auto-hide** genealogy papers.
+  - **Triage funnel (the sifting/QC answer)** — every paper scored on independent signals
+    (keyword relevance, seed-connectivity, in-corpus citation degree, cross-source
+    corroboration, global citations, recency) → tiers **A=127 (read) · B=694 (scan) ·
+    C=230 (reference) · D=1,992 (tools/off-topic)**; QC flags 104 duplicate/preprint pairs +
+    5 orphans. Tiers written to the DB; Tier-A also a `core_reading` GUI bucket. Outputs:
+    `data/out/genealogy_triage.csv`, `deep_research/CORE_READING_LIST.md`.
+  - **Historical progression table** `deep_research/HISTORICAL_PROGRESSION.md` — 108-row
+    spine, year-by-year, with each paper's **forward descendants** (in-corpus citers) — how
+    each idea progresses forward.
+  - **Reproducible pipeline** `research-paper-tracker/tools/genealogy/` (`1_build_tree` →
+    `2_ingest_tree` → `3_triage` → `4_gen_history`) + README documenting sources, seeds,
+    the triage signals/tiers, and QC.
+  - **First payoff:** the sweep surfaced spine papers absent from the manuscript corpus —
+    Anscombe (1950, NBD sampling theory), Guadagni & Little (1983), Dew (2018), Bachmann
+    et al. (2021), and **Xie (2020) "Pareto/NBD versus neural network"** (a direct BTYD-vs-ML
+    comparison to screen against the novelty claim — verify whether its "calibration" is the
+    estimation window or probability calibration).
+
 ### 2026-09-01
 - **Repo cleanup + organization.** Tidied the working tree without touching any tracked source or
   deleting untracked data. Removed regenerable build artifacts (all `__pycache__/`; the LaTeX
