@@ -83,3 +83,22 @@ TEST_CASE("ingest_csv matches the Python golden file (explicit as_of)", "[ingest
         REQUIRE(features.m_bar[i] == Catch::Approx(c["m_bar"].get<double>()).epsilon(1e-9));
     }
 }
+
+TEST_CASE("ingest_csv matches the Python golden file (no amount column)", "[ingest][golden]") {
+    auto features = pareto_nbd::ingest_csv(std::string(PROJECT_MODELS_DIR) + "/ingest_sample_no_money.csv");
+
+    std::ifstream f(std::string(PROJECT_MODELS_DIR) + "/ingest_golden_no_money.json");
+    nlohmann::json golden;
+    f >> golden;
+
+    REQUIRE_FALSE(features.has_monetary);
+    REQUIRE(features.m_bar.empty());
+    REQUIRE(features.customer_id.size() == golden["customers"].size());
+
+    for (const auto& c : golden["customers"]) {
+        size_t i = index_of(features, c["cust"].get<std::string>());
+        REQUIRE(features.x[i] == Catch::Approx(c["x"].get<double>()).epsilon(1e-9));
+        REQUIRE(features.t_x[i] == Catch::Approx(c["t_x"].get<double>()).epsilon(1e-9));
+        REQUIRE(features.T_cal[i] == Catch::Approx(c["T_cal"].get<double>()).epsilon(1e-9));
+    }
+}
