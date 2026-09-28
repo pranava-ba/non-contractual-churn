@@ -45,6 +45,13 @@ paper_gear2/*.synctex.gz
 paper/
 paper_gear2/
 
+# Local-only research/tooling directories — kept on disk, never committed to this repo.
+deep_research/
+first_review/
+paper-explorer/
+research-paper-tracker/
+ROADMAP.md
+
 # Downloaded third-party papers — copyrighted PDFs, not ours to redistribute via the repo.
 deep_research/essentials_papers/
 deep_research/essentials_papers.zip
