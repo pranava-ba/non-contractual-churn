@@ -25,6 +25,13 @@ find_package(onnxruntime CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(Arrow CONFIG REQUIRED)
 
+# This vcpkg build of Arrow 25 ships its compute kernels (sort_indices,
+# take, etc.) in a separate CMake package, ArrowCompute, rather than folding
+# them into Arrow::arrow_shared. The kernels register themselves onto the
+# global FunctionRegistry via arrow::compute::Initialize(), whose symbol
+# lives in this library, so it must be linked explicitly.
+find_package(ArrowCompute CONFIG REQUIRED)
+
 add_library(amortized_inference
     src/version.cpp
     src/moments.cpp
@@ -40,6 +47,7 @@ target_link_libraries(amortized_inference PUBLIC
     onnxruntime::onnxruntime
     nlohmann_json::nlohmann_json
     Arrow::arrow_shared
+    "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,ArrowCompute::arrow_compute_static,ArrowCompute::arrow_compute_shared>"
 )
 
 add_executable(main src/main.cpp)
