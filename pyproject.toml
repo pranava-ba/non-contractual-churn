@@ -1,24 +1,53 @@
-dev
- ├── pytest
- ├── black
- ├── flake8
- ├── sphinx
- └── myst-parser
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
-ml
- └── scikit-learn
+[project]
+name = "pareto-nbd-extension"
+version = "1.0.0"
+description = "Probabilistic forecasting, calibration evaluation, and Pareto/GGG extensions for Buy-Till-You-Die (BTYD) models"
+readme = "README.md"
+authors = [
+    { name = "Pranava BA", email = "pranavabaascaran@gmail.com" },
+    { name = "Vyasa R Rajeswaran", email = "vyasarshi2308@gmail.com" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.22.0",
+    "scipy>=1.8.0",
+    "pandas>=1.4.0",
+    "matplotlib>=3.5.0"
+]
 
-onnx
- ├── onnx
- ├── skl2onnx
- └── onnxruntime
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "sphinx>=5.0.0",
+    "sphinx-rtd-theme>=1.0.0",
+    "myst-parser>=0.18.0"
+]
+ml = [
+    "scikit-learn>=1.1.0"
+]
+onnx = [
+    "onnx",
+    "skl2onnx>=1.16.0",
+    "onnxruntime>=1.20.0"
+]
+causal = [
+    "scikit-learn>=1.1.0",
+    "lightgbm>=4.7.0",
+    "xgboost>=3.4.0",
+    "shap>=0.52.0",
+    "econml>=0.17.0",
+    "causalml>=0.17.0",
+    "scikit-uplift>=0.5.1",
+    "joblib>=1.3.0"
+]
 
-causal
- ├── scikit-learn
- ├── lightgbm
- ├── xgboost
- ├── shap
- ├── econml
- ├── causalml
- ├── scikit-uplift
- └── joblib
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
