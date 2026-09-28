@@ -23,6 +23,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Catch2 3 CONFIG REQUIRED)
 find_package(onnxruntime CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+find_package(Arrow CONFIG REQUIRED)
 
 add_library(amortized_inference
     src/version.cpp
@@ -32,11 +33,13 @@ add_library(amortized_inference
     src/nelder_mead.cpp
     src/clv.cpp
     src/conformal.cpp
+    src/ingest.cpp
 )
 target_include_directories(amortized_inference PUBLIC include)
 target_link_libraries(amortized_inference PUBLIC
     onnxruntime::onnxruntime
     nlohmann_json::nlohmann_json
+    Arrow::arrow_shared
 )
 
 add_executable(main src/main.cpp)
@@ -54,6 +57,7 @@ add_executable(unit_tests
     tests/test_nelder_mead.cpp
     tests/test_clv.cpp
     tests/test_conformal.cpp
+    tests/test_ingest.cpp
 )
 target_link_libraries(unit_tests PRIVATE amortized_inference Catch2::Catch2WithMain)
 target_compile_definitions(unit_tests PRIVATE

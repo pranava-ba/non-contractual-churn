@@ -5,6 +5,10 @@
   "dependencies": [
     "onnxruntime",
     "nlohmann-json",
-    "catch2"
+    "catch2",
+    {
+      "name": "arrow",
+      "features": ["csv", "compute"]
+    }
   ]
 }
