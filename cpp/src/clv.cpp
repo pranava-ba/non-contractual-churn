@@ -1,0 +1,156 @@
+#include "pareto_nbd/clv.hpp"
+
+#include <cmath>
+#include <limits>
+#include <random>
+#include <stdexcept>
+
+#include "pareto_nbd/nelder_mead.hpp"
+
+namespace pareto_nbd {
+
+std::vector<double> posterior_mean_nu(const std::vector<double>& x,
+                                       const std::vector<double>& m_obs,
+                                       const GammaGammaParams& params) {
+    if (x.empty()) {
+        throw std::invalid_argument("posterior_mean_nu: x must not be empty");
+    }
+    if (x.size() != m_obs.size()) {
+        throw std::invalid_argument("posterior_mean_nu: m_obs.size() must equal x.size()");
+    }
+
+    std::vector<double> out(x.size());
+    for (size_t i = 0; i < x.size(); ++i) {
+        double shape, scale;
+        if (x[i] > 0.0) {
+            shape = params.p * x[i] + params.q;
+            scale = params.p * x[i] * m_obs[i] + params.v;
+        } else {
+            shape = params.q;
+            scale = params.v;
+        }
+        // The Inverse-Gamma mean is undefined for shape <= 1; return NaN
+        // rather than a silently-wrong negative/infinite value, matching
+        // clv.py's fit_gamma_gamma convention (expected_margin: v/(q-1) if
+        // q>1 else np.nan).
+        out[i] = (shape <= 1.0) ? std::numeric_limits<double>::quiet_NaN() : scale / (shape - 1.0);
+    }
+    return out;
+}
+
+std::vector<std::vector<double>> predict_clv_distribution(
+    const std::vector<std::vector<double>>& pred_x_star,
+    const std::vector<std::vector<double>>& nu_draws,
+    double discount_rate) {
+    if (pred_x_star.size() != nu_draws.size()) {
+        throw std::invalid_argument(
+            "predict_clv_distribution: pred_x_star.size() must equal nu_draws.size()");
+    }
+    for (size_t d = 0; d < pred_x_star.size(); ++d) {
+        if (pred_x_star[d].size() != nu_draws[d].size()) {
+            throw std::invalid_argument(
+                "predict_clv_distribution: pred_x_star[d].size() must equal nu_draws[d].size()");
+        }
+    }
+
+    double dfactor = std::exp(-discount_rate);
+    std::vector<std::vector<double>> out(pred_x_star.size());
+    for (size_t d = 0; d < pred_x_star.size(); ++d) {
+        out[d].resize(pred_x_star[d].size());
+        for (size_t i = 0; i < pred_x_star[d].size(); ++i) {
+            out[d][i] = pred_x_star[d][i] * nu_draws[d][i] * dfactor;
+        }
+    }
+    return out;
+}
+
+namespace {
+
+double gamma_gamma_neg_loglik(const std::vector<double>& log_params,
+                               const std::vector<double>& x_val,
+                               const std::vector<double>& m_val) {
+    double p = std::exp(log_params[0]);
+    double q = std::exp(log_params[1]);
+    double v = std::exp(log_params[2]);
+
+    double ll = 0.0;
+    for (size_t i = 0; i < x_val.size(); ++i) {
+        double xi = x_val[i];
+        double mi = m_val[i];
+        ll += std::lgamma(p * xi + q) - std::lgamma(p * xi) - std::lgamma(q)
+              + q * std::log(v) + (p * xi - 1.0) * std::log(mi)
+              + (p * xi) * std::log(p * xi)
+              - (p * xi + q) * std::log(p * xi * mi + v);
+    }
+    return -ll;
+}
+
+}  // namespace
+
+GammaGammaParams fit_gamma_gamma(const std::vector<double>& x, const std::vector<double>& m_obs) {
+    if (x.size() != m_obs.size()) {
+        throw std::invalid_argument("fit_gamma_gamma: m_obs.size() must equal x.size()");
+    }
+
+    std::vector<double> x_val, m_val;
+    for (size_t i = 0; i < x.size(); ++i) {
+        if (x[i] > 0.0 && m_obs[i] > 0.0) {
+            x_val.push_back(x[i]);
+            m_val.push_back(m_obs[i]);
+        }
+    }
+    if (x_val.empty()) {
+        throw std::invalid_argument(
+            "fit_gamma_gamma: no valid customers (x>0 && m_obs>0) to fit on");
+    }
+
+    auto objective = [&](const std::vector<double>& log_params) {
+        return gamma_gamma_neg_loglik(log_params, x_val, m_val);
+    };
+
+    std::vector<double> x0 = {std::log(2.0), std::log(2.0), std::log(10.0)};
+    auto result = nelder_mead(objective, x0);
+
+    return {std::exp(result.x[0]), std::exp(result.x[1]), std::exp(result.x[2])};
+}
+
+std::vector<std::vector<double>> sample_posterior_nu(const std::vector<double>& x,
+                                                      const std::vector<double>& m_obs,
+                                                      const GammaGammaParams& params,
+                                                      size_t n_draws, uint64_t seed) {
+    if (x.empty()) {
+        throw std::invalid_argument("sample_posterior_nu: x must not be empty");
+    }
+    if (x.size() != m_obs.size()) {
+        throw std::invalid_argument("sample_posterior_nu: m_obs.size() must equal x.size()");
+    }
+
+    const size_t N = x.size();
+    std::vector<double> shape(N), scale(N);
+    for (size_t i = 0; i < N; ++i) {
+        if (x[i] > 0.0) {
+            shape[i] = params.p * x[i] + params.q;
+            scale[i] = params.p * x[i] * m_obs[i] + params.v;
+        } else {
+            shape[i] = params.q;
+            scale[i] = params.v;
+        }
+    }
+
+    std::vector<std::gamma_distribution<double>> dists;
+    dists.reserve(N);
+    for (size_t i = 0; i < N; ++i) {
+        dists.emplace_back(shape[i], 1.0 / scale[i]);  // Gamma(shape, scale=1/scale_i)
+    }
+
+    std::mt19937_64 rng(seed);
+    std::vector<std::vector<double>> nu(n_draws, std::vector<double>(N));
+    for (size_t d = 0; d < n_draws; ++d) {
+        for (size_t i = 0; i < N; ++i) {
+            nu[d][i] = 1.0 / dists[i](rng);
+        }
+    }
+    return nu;
+}
+
+}  // namespace pareto_nbd
