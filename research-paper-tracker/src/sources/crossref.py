@@ -13,6 +13,8 @@ BASE = "https://api.crossref.org/works"
 SELECT = ("DOI,title,container-title,published,published-online,published-print,"
           "issued,author,score,abstract")
 
+CALLS_MADE = 0  # bumped per request sent; read by run.py for the budget report
+
 
 def _strip_jats(s: str) -> str:
     if not s:
@@ -72,6 +74,8 @@ def fetch_keyword(cfg, query: str, date_from: str, date_to: str) -> list[dict]:
         "select": SELECT,
     }
     ua = f"research-paper-tracker/1.0 (mailto:{cfg.settings['contact_email']})"
+    global CALLS_MADE
+    CALLS_MADE += 1
     r = requests.get(BASE, params=params, headers={"User-Agent": ua},
                      timeout=cfg.settings["request_timeout"])
     r.raise_for_status()

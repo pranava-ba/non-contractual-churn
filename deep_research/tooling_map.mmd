@@ -1,0 +1,79 @@
+flowchart TD
+  classDef maint fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#111827;
+  classDef dep fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#111827;
+  classDef math fill:#ffedd5,stroke:#c2410c,stroke-width:2px,color:#111827;
+  classDef gap fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#111827;
+
+  MATH["Bruce Hardie technical notes + Excel<br>(brucehardie.com) - canonical math"]
+
+  subgraph MODELS["Models (what you estimate)"]
+    PNBD["Pareto/NBD"]
+    BGNBD["BG/NBD"]
+    BGBB["BG/BB (discrete)"]
+    PGGG["Pareto/GGG (timing)"]
+    GGOM["Gamma/Gompertz-NBD"]
+    HBP["HB Pareto/NBD (MCMC)"]
+    GGSP["Gamma-Gamma (spending)"]
+  end
+
+  subgraph RPKG["R packages"]
+    BTYD["BTYD"]
+    BTYDPLUS["BTYDplus"]
+    CLVTOOLS["CLVTools (maintained)"]
+  end
+
+  subgraph PYPKG["Python packages"]
+    LIFETIMES["lifetimes (archived)"]
+    PYMC["PyMC-Marketing (maintained)"]
+  end
+
+  subgraph EVAL["Evaluation / calibration (BTYD packages lack this)"]
+    SCORING["scoringRules / properscoring<br>CRPS, log score"]
+    CONF["MAPIE / crepes<br>conformal prediction"]
+    SKCAL["sklearn calibration<br>uncertainty-toolbox (ECE, PIT)"]
+  end
+
+  subgraph MLST["ML for CLV / churn"]
+    ZILN["ZILN loss<br>(TensorFlow Probability)"]
+    RNN["RNN / seq2seq (custom)"]
+    GBM["XGBoost / LightGBM"]
+  end
+
+  MATH --> BTYD
+  MATH --> BTYDPLUS
+  MATH --> CLVTOOLS
+  MATH --> LIFETIMES
+  MATH --> PYMC
+
+  BTYD --> PNBD
+  BTYD --> BGNBD
+  BTYD --> BGBB
+  BTYDPLUS --> PNBD
+  BTYDPLUS --> PGGG
+  BTYDPLUS --> HBP
+  CLVTOOLS --> PNBD
+  CLVTOOLS --> BGNBD
+  CLVTOOLS --> GGOM
+  CLVTOOLS --> GGSP
+  LIFETIMES --> BGNBD
+  LIFETIMES --> PNBD
+  LIFETIMES --> GGSP
+  PYMC --> BGNBD
+  PYMC --> PNBD
+  PYMC --> GGSP
+  PYMC --> HBP
+
+  ZILN --> GGSP
+  RNN --> PNBD
+  GBM --> BGNBD
+
+  GAP["This project's contribution:<br>evaluate these forecasts by<br>PROBABILITY CALIBRATION<br>(PIT / CRPS / coverage)"]
+  PNBD --> GAP
+  ZILN --> GAP
+  SCORING --> GAP
+
+  class CLVTOOLS maint
+  class PYMC maint
+  class LIFETIMES dep
+  class MATH math
+  class GAP gap

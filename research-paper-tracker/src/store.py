@@ -31,11 +31,33 @@ CREATE TABLE IF NOT EXISTS papers (
 -- Per-paper user state (read / starred / hidden / tags), keyed by uid so it
 -- persists across runs.
 CREATE TABLE IF NOT EXISTS paper_state (
-    uid     TEXT PRIMARY KEY,
-    read    INTEGER DEFAULT 0,
-    starred INTEGER DEFAULT 0,
-    hidden  INTEGER DEFAULT 0,
-    tags    TEXT
+    uid          TEXT PRIMARY KEY,
+    read         INTEGER DEFAULT 0,
+    starred      INTEGER DEFAULT 0,
+    hidden       INTEGER DEFAULT 0,
+    tags         TEXT,
+    analyzed     INTEGER DEFAULT 0,  -- deep-dived / evaluated, not just skim-read
+    used_override INTEGER            -- manual used yes/no; NULL = trust the bib auto-detect
+);
+
+-- Known aliases of the same underlying work reached via different uids (e.g. an
+-- arXiv preprint that later got a DOI). Never merged destructively -- both rows
+-- stay in `papers`; this table just records "these are the same paper" so exports
+-- and counts can collapse them. Populated by tools/curate.py --dedupe-check.
+CREATE TABLE IF NOT EXISTS paper_aliases (
+    uid       TEXT PRIMARY KEY,   -- the uid to treat as a duplicate
+    of_uid    TEXT NOT NULL,      -- the uid to keep / count instead
+    reason    TEXT,
+    found_at  TEXT
+);
+
+-- One row per calendar day an API source was hit, so a run can see how much of
+-- today's (UTC) budget is already spent before deciding how hard to retry.
+CREATE TABLE IF NOT EXISTS api_calls (
+    day     TEXT,
+    source  TEXT,
+    calls   INTEGER DEFAULT 0,
+    PRIMARY KEY (day, source)
 );
 
 CREATE TABLE IF NOT EXISTS paper_categories (
@@ -88,6 +110,8 @@ def connect(db_path: Path) -> sqlite3.Connection:
         ("papers", "oa_url", "TEXT"),
         ("paper_state", "hidden", "INTEGER DEFAULT 0"),
         ("paper_state", "tags", "TEXT"),
+        ("paper_state", "analyzed", "INTEGER DEFAULT 0"),
+        ("paper_state", "used_override", "INTEGER"),
     ]:
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
@@ -202,12 +226,50 @@ def list_run_dates(conn) -> list[dict]:
     return [{"run_date": r["run_date"], "count": r["n"]} for r in rows]
 
 
+# --- duplicate aliases -------------------------------------------------------
+
+def add_alias(conn, uid: str, of_uid: str, reason: str, found_at: str) -> None:
+    if uid == of_uid:
+        return
+    conn.execute(
+        "INSERT OR REPLACE INTO paper_aliases (uid, of_uid, reason, found_at) VALUES (?, ?, ?, ?)",
+        (uid, of_uid, reason, found_at),
+    )
+    conn.commit()
+
+
+def alias_map(conn) -> dict[str, str]:
+    """uid -> of_uid for every known duplicate. Read-only helper for exports/analytics
+    that want to collapse aliases without deleting the aliased row."""
+    rows = conn.execute("SELECT uid, of_uid FROM paper_aliases").fetchall()
+    return {r["uid"]: r["of_uid"] for r in rows}
+
+
+# --- API call budget ---------------------------------------------------------
+
+def record_api_calls(conn, day: str, source: str, n: int = 1) -> None:
+    conn.execute(
+        "INSERT INTO api_calls (day, source, calls) VALUES (?, ?, ?)"
+        " ON CONFLICT(day, source) DO UPDATE SET calls = calls + excluded.calls",
+        (day, source, n),
+    )
+    conn.commit()
+
+
+def api_calls_today(conn, day: str, source: str) -> int:
+    row = conn.execute(
+        "SELECT calls FROM api_calls WHERE day = ? AND source = ?", (day, source)
+    ).fetchone()
+    return row["calls"] if row else 0
+
+
 def papers_for_category(conn, category: str, run_date: str | None = None) -> list[sqlite3.Row]:
     """Surfaced papers for a category, optionally restricted to one refresh week."""
     sql = (
         "SELECT p.*, pc.run_date, pc.rank, pc.match_score, pc.relevance, pc.matched_terms,"
         " COALESCE(ps.read,0) AS read, COALESCE(ps.starred,0) AS starred,"
-        " COALESCE(ps.hidden,0) AS hidden, COALESCE(ps.tags,'') AS tags"
+        " COALESCE(ps.hidden,0) AS hidden, COALESCE(ps.tags,'') AS tags,"
+        " COALESCE(ps.analyzed,0) AS analyzed, ps.used_override AS used_override"
         " FROM paper_categories pc JOIN papers p ON p.uid = pc.uid"
         " LEFT JOIN paper_state ps ON ps.uid = p.uid"
         " WHERE pc.category = ?"
@@ -220,16 +282,37 @@ def papers_for_category(conn, category: str, run_date: str | None = None) -> lis
     return conn.execute(sql, args).fetchall()
 
 
+def all_papers(conn) -> list[sqlite3.Row]:
+    """Every tracked paper (one row each, regardless of category), with state.
+    Used by the Coverage page, which groups papers by category itself."""
+    sql = (
+        "SELECT p.*, COALESCE(ps.read,0) AS read, COALESCE(ps.starred,0) AS starred,"
+        " COALESCE(ps.hidden,0) AS hidden, COALESCE(ps.tags,'') AS tags,"
+        " COALESCE(ps.analyzed,0) AS analyzed, ps.used_override AS used_override,"
+        " (SELECT GROUP_CONCAT(category, '|') FROM paper_categories WHERE uid = p.uid) AS categories"
+        " FROM papers p LEFT JOIN paper_state ps ON ps.uid = p.uid"
+    )
+    return conn.execute(sql).fetchall()
+
+
 def get_paper(conn, uid: str) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM papers WHERE uid = ?", (uid,)).fetchone()
 
 
 def set_state(conn, uid: str, field: str, value: int) -> None:
-    """Set a per-paper flag ('read' / 'starred' / 'hidden')."""
-    if field not in ("read", "starred", "hidden"):
+    """Set a per-paper flag ('read' / 'starred' / 'hidden' / 'analyzed')."""
+    if field not in ("read", "starred", "hidden", "analyzed"):
         raise ValueError(field)
     conn.execute("INSERT OR IGNORE INTO paper_state (uid) VALUES (?)", (uid,))
     conn.execute(f"UPDATE paper_state SET {field} = ? WHERE uid = ?", (int(bool(value)), uid))
+    conn.commit()
+
+
+def set_used_override(conn, uid: str, value: bool | None) -> None:
+    """Manually force a paper's 'used' badge on/off; None reverts to the bib auto-detect."""
+    conn.execute("INSERT OR IGNORE INTO paper_state (uid) VALUES (?)", (uid,))
+    v = None if value is None else int(bool(value))
+    conn.execute("UPDATE paper_state SET used_override = ? WHERE uid = ?", (v, uid))
     conn.commit()
 
 

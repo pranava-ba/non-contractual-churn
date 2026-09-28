@@ -3,6 +3,7 @@
 # `python tools/curate.py` (the CSVs under data/out/).
 __pycache__/
 *.pyc
+.pytest_cache/
 
 # SQLite source-of-truth DB + its timestamped backups (local state).
 data/tracker.db

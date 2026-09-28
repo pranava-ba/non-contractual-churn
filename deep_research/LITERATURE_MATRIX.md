@@ -146,6 +146,10 @@ Schuirmann (1987, TOST) · Dawid (1984). — all 🔬, ⚪ priority; confirm we 
 | TU Dublin = Manzoor et al. (ML churn review) | 2024 | IEEE Access 12 | field survey (**cited v2.0.3**); **0 BTYD, 0 calibration**; profit-metric lineage | 🔬 | ☑ 2026-08-10 | 🟡 |
 | Leoni & Perego (thesis) | 2022 | PoliMi MSc | non-contractual retail churn, transactional + private-label features | ❌ *(recall/profit; calibrat=0)* — **discard / optional** | ☑ 2026-08-10 | ⚪ |
 | Sci. Reports (ensemble-fusion) | 2024 | Sci Rep | recent ML churn method (telecom) | ❌ *(AUC/ROC/F1/accuracy; calibrat=0)* — **discard** | ☑ 2026-08-10 | ⚪ |
+| Adi, Arafah, Dabur et al. (AMR rebalancing) | 2026 | F1000Research (v1, awaiting peer review; doi 10.12688/f1000research.188025.1) | topology-aware SMOTE-ENN alternative + cost-sensitive XGBoost + SHAP; datasets = Telco/Bank/Credit-Card/Insurance (Kaggle) | ❌ *(contractual, observed-label classification; AUPRC/EMP; calibrat=0)* — **discard, deleted from references/** | ☑ 2026-09-25 | ⚪ |
+| Albanese (hydrodynamic cavitation juice review) | 2026 | *Molecules* 31(18):3323 | PME/PPO/POD enzyme inactivation in juice processing | ❌ *(wrong field entirely — food-science chemistry, no CLV/statistics content)* — **discard, deleted from references/** | ☑ 2026-09-25 | ⚪ |
+| Khan, Capaso, Azzolina et al. (Bayesian basket/umbrella) | 2026 | *Epidemiol. Biostat. Public Health* 21 Suppl.1 (SISMEC congress) | Bayesian basket/umbrella trial design for pediatric airway disease | ❌ *(clinical trial biostatistics, not marketing/CLV)* — **discard, deleted from references/** | ☑ 2026-09-25 | ⚪ |
+| Dolce, Iervolino, Azzolina et al. (SEM vs MSM causal estimands) | 2026 | *Epidemiol. Biostat. Public Health* 21 Suppl.1 (SISMEC congress) | SEM vs. marginal structural models for controlled direct effects under latent intermediate confounding (HFrEF trials) | ❌ *(causal-inference method, but clinical-trial intercurrent events — no BTYD/uplift transfer)* — **discard, deleted from references/** | ☑ 2026-09-25 | ⚪ |
 
 ---
 
@@ -159,14 +163,16 @@ Fill each paper's dataset(s) during the read; this shows the field's coverage vs
 | Online Retail / II | many; us | ✅ |
 | Grocery / Dunnhumby / Ta-Feng / Olist | us | ✅ |
 | Telecom (IBM/Kaggle, UCI) — **contractual** | the ML-churn field: Imani, Sci Rep, Manzoor, De Caigny, Coolwijk, ChurnNet, Mufti | n/a (contractual; out of scope by design) |
-| Kaggle e-commerce churn (India) | *(search — F8)* | ❌ **open** |
+| India non-contractual transaction log | *(F8 — searched, not found)* | ❌ **CLOSED 2026-09-20: unobtainable → documented as a manuscript limitation** |
 
-> **F8 — reviewed 2026-08-10, still open.** Mining the two review bibliographies did **not** surface an
-> India non-contractual **transaction-level** dataset: Imani's three "India" hits are all *conference
-> locations* (ICICV Tirunelveli, ICSCAN Pondicherry, ICWITE Bangalore), not datasets. The ML-churn
-> field is overwhelmingly **telecom/UCI (contractual)** — which actually sharpens our contribution
-> (seven genuinely non-contractual **transaction logs** vs a telecom-dominated field). F8 remains a
-> user decision; the OpenAlex topical India search (`deep_dive.md` §4) is the remaining automated lead.
+> **F8 — CLOSED 2026-09-20 (unobtainable).** No genuinely Indian customer-level non-contractual
+> **transaction-level** dataset could be sourced (Imani's three "India" hits are *conference locations*
+> — ICICV Tirunelveli, ICSCAN Pondicherry, ICWITE Bangalore — not datasets; the ML-churn field is
+> overwhelmingly **telecom/UCI, contractual**). Decision taken to **present the US/UK/Brazil/Taiwan
+> spread as-is** and record the geographic concentration as an explicit **data limitation** in the
+> manuscript (Data § + Limitations §, v2.0.12), flagged for future revisiting if such data appears.
+> The telecom-dominated alternative actually *sharpens* our contribution (seven genuinely
+> non-contractual transaction logs vs a contractual field).
 
 ## 4. Reading progress
 - **Candidates: 5 / 5 read** (2026-08-10) — Ulrich (full), Manzoor/TU Dublin (§VI + Appendix; crosswalk

@@ -1,6 +1,7 @@
 """OpenAlex feeds: journal-scoped (by ISSN) and open keyword search."""
 from __future__ import annotations
 
+import random
 import re
 import time
 
@@ -8,14 +9,22 @@ import requests
 
 BASE = "https://api.openalex.org/works"
 SELECT = ("id,doi,title,publication_date,relevance_score,primary_location,authorships,"
-          "abstract_inverted_index,open_access,best_oa_location")
+          "abstract_inverted_index,open_access,best_oa_location,concepts")
+
+# Bumped when a request is actually sent, so run.py can report how many hit the API
+# this run (feeds into the daily-budget check in store.api_calls / config settings).
+CALLS_MADE = 0
 
 
 def _get(session, params, cfg):
-    """GET with a SHORT backoff on transient rate limits, but fail fast on a hard
-    block (server sends a big Retry-After) so a refresh never hangs for minutes."""
+    """GET with a SHORT, jittered backoff on transient rate limits, but fail fast on
+    a hard block (server sends a big Retry-After) so a refresh never hangs for
+    minutes. Jitter avoids every retry landing on the same wall-clock second as
+    other callers sharing this IP's rate-limit bucket."""
+    global CALLS_MADE
     timeout = cfg.settings["request_timeout"]
     for attempt in range(3):
+        CALLS_MADE += 1
         r = session.get(BASE, params=params, timeout=timeout)
         if r.status_code in (429, 503):
             retry_after = 0
@@ -26,7 +35,8 @@ def _get(session, params, cfg):
             if retry_after > 60:            # hard block (minutes/hours) — don't wait
                 r.raise_for_status()
             if attempt < 2:
-                time.sleep(min(retry_after or (attempt + 1) * 2, 6))  # 2s, 4s
+                base_wait = retry_after or (attempt + 1) * 2
+                time.sleep(min(base_wait + random.uniform(0, 1.5), 6))
                 continue
         r.raise_for_status()
         return r
@@ -101,6 +111,16 @@ def _normalize(work: dict, cfg) -> dict | None:
     oa_url = (best.get("pdf_url") or (work.get("open_access") or {}).get("oa_url")
               or (work.get("primary_location") or {}).get("pdf_url"))
 
+    # Topic concepts (OpenAlex's own classifier) as a secondary relevance signal,
+    # alongside the keyword regex match in src/match.py -- catches papers whose
+    # abstract is generic but whose classified topic is squarely on point, and can
+    # down-weight a keyword false positive whose top concepts are unrelated.
+    concepts = sorted(
+        ((c.get("display_name", ""), float(c.get("score", 0.0)))
+         for c in (work.get("concepts") or []) if c.get("score", 0) >= 0.3),
+        key=lambda c: -c[1],
+    )[:6]
+
     return {
         "uid": uid,
         "doi": bare,
@@ -117,6 +137,7 @@ def _normalize(work: dict, cfg) -> dict | None:
         "url": url,
         "tier": tier,
         "relevance": float(work.get("relevance_score") or 0.0),
+        "concepts": concepts,
     }
 
 
@@ -132,17 +153,24 @@ def _paged(params: dict, cfg, max_pages: int) -> list[dict]:
         }
     )
     out: list[dict] = []
-    for page in range(1, max_pages + 1):
-        params["page"] = page
-        r = _get(session, params, cfg)
-        results = r.json().get("results", [])
-        for w in results:
-            p = _normalize(w, cfg)
-            if p:
-                out.append(p)
-        if len(results) < per_page:
-            break
-        time.sleep(cfg.settings["openalex_delay"])
+    try:
+        for page in range(1, max_pages + 1):
+            params["page"] = page
+            r = _get(session, params, cfg)
+            results = r.json().get("results", [])
+            for w in results:
+                p = _normalize(w, cfg)
+                if p:
+                    out.append(p)
+            if len(results) < per_page:
+                break
+            time.sleep(cfg.settings["openalex_delay"])
+    except requests.RequestException:
+        # A hard failure mid-paging (e.g. a rate-limit block on page 2 of 3) used
+        # to discard every page already fetched this call. Keep what we have —
+        # partial coverage beats silently losing already-fetched candidates.
+        if not out:
+            raise
     return out
 
 

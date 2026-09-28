@@ -30,6 +30,20 @@ clustering, so genuinely relevant work is never dropped by an incidental word.
 Manual review is authoritative: a paper you have STARRED in the GUI is treated as a
 persistent "keep" and is never auto-hidden, so re-running --apply can never undo a
 manual check.
+
+A fourth, independent job:
+
+  4. --dedupe-check -> data/out/possible_duplicates.csv   candidate duplicate PAIRS
+                                                           (e.g. an arXiv preprint and
+                                                           its later DOI'd version),
+                                                           found by normalized-title
+                                                           match across different uids.
+
+This is audit-only: nothing is merged or hidden automatically (an arXiv-only uid and
+a doi:-prefixed uid are permanently different primary keys once created, and a wrong
+auto-merge is much harder to undo than a wrong hide). Review the CSV and, if a pair
+really is the same paper, hide whichever uid you don't want counted (its categories/
+seen rows are untouched, so nothing about "when it was first surfaced" is lost).
 """
 from __future__ import annotations
 
@@ -83,6 +97,46 @@ def _has(text: str, terms) -> bool:
     return any(t in text for t in terms)
 
 
+_TITLE_NOISE_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _normalize_title(title: str) -> str:
+    """Lightweight, dependency-free title key for duplicate detection. Not the same
+    module as src/citations.py's (which also normalizes LaTeX escapes for .bib
+    matching) -- kept separate so this tool stays runnable standalone."""
+    return _TITLE_NOISE_RE.sub(" ", (title or "").lower()).strip()
+
+
+def find_possible_duplicates(rs) -> list[tuple]:
+    """Group non-hidden papers by normalized title; any group with >1 distinct uid
+    is a candidate duplicate (most commonly: the same paper reached once via arXiv
+    and once via a DOI source, which get different uids and are never reconciled
+    automatically -- see store.paper_aliases). Returns
+    (title, uid_a, source_a, uid_b, source_b) pairs, most-recent-first_seen first.
+    """
+    by_title: dict[str, list] = {}
+    for r in rs:
+        if r["hidden"]:
+            continue
+        key = _normalize_title(r["title"])
+        if not key or len(key) < 8:  # too short to be a reliable signal
+            continue
+        by_title.setdefault(key, []).append(r)
+
+    pairs = []
+    for title, group in by_title.items():
+        uids = {r["uid"] for r in group}
+        if len(uids) < 2:
+            continue
+        group = sorted(group, key=lambda r: r["first_seen"] or "", reverse=True)
+        for i in range(len(group)):
+            for j in range(i + 1, len(group)):
+                a, b = group[i], group[j]
+                pairs.append((title, a["uid"], a["source"] or "", a["first_seen"] or "",
+                             b["uid"], b["source"] or "", b["first_seen"] or ""))
+    return pairs
+
+
 def classify(title: str, abstract: str, venue: str) -> tuple[str, str]:
     """Return (decision, reason). decision in {'keep','remove'}."""
     t = " " + (title or "").lower() + " "
@@ -134,11 +188,22 @@ def snapshot(rs):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--apply", action="store_true", help="apply removals (default: dry run)")
+    ap.add_argument("--dedupe-check", action="store_true",
+                    help="also write data/out/possible_duplicates.csv (audit-only, no changes)")
     args = ap.parse_args()
 
     conn = sqlite3.connect(DB); conn.row_factory = sqlite3.Row
     rs = rows(conn)
     snapshot(rs)
+
+    if args.dedupe_check:
+        pairs = find_possible_duplicates(rs)
+        with open(OUT / "possible_duplicates.csv", "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["title", "uid_a", "source_a", "first_seen_a",
+                        "uid_b", "source_b", "first_seen_b"])
+            w.writerows(pairs)
+        print(f"dedupe check -> {OUT/'possible_duplicates.csv'}  ({len(pairs)} candidate pair(s))")
 
     # classify. Precedence: a prior removal stays removed; a manual keep (the user
     # starred it) is authoritative and is NEVER auto-hidden; otherwise auto-classify.
@@ -148,6 +213,13 @@ def main():
             decision, reason = "remove", "already_hidden"
         elif r["starred"]:
             decision, reason = "keep", "user_kept"     # persistent manual check — protect it
+        elif (r["source"] or "") == "genealogy" or "genealogy" in (r["cats"] or "") \
+                or "foundations" in (r["cats"] or ""):
+            # Citation-tree genealogy corpus (source='genealogy'; deep_research/
+            # FIELD_GENEALOGY.md). This is the deliberate historical backbone spanning
+            # 1959->present, so off-topic backward refs (stats/ML tools, contractual
+            # comparators) are KEPT on purpose and never auto-hidden by curation.
+            decision, reason = "keep", "genealogy_protected"
         else:
             decision, reason = classify(r["title"], r["abstract"], r["venue"])
         review.append((r["uid"], r["cats"] or "", decision, reason,

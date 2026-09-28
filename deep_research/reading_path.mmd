@@ -1,0 +1,110 @@
+flowchart TD
+  classDef crit fill:#dbeafe,stroke:#1a56db,stroke-width:3px,color:#111827;
+  classDef found fill:#ffedd5,stroke:#c2410c,stroke-width:2px,color:#111827;
+  classDef ours fill:#d1fae5,stroke:#059669,stroke-width:2px,color:#111827;
+  classDef screen fill:#fee2e2,stroke:#dc2626,stroke-width:2px,color:#111827;
+
+  subgraph ORI["1. Orientation - start here"]
+    FH09["Fader and Hardie 2009<br>Probability Models (tutorial)"]
+    MC14["McCarthy and Wadsworth 2014<br>BTYD R walkthrough"]
+  end
+
+  subgraph FND["2. Statistical foundations"]
+    EHR59["Ehrenberg 1959<br>NBD (purchase counts)"]
+    DIR84["Goodhardt et al 1984<br>NBD-Dirichlet (context)"]
+    SMC87["Schmittlein-Morrison-Colombo 1987<br>Pareto/NBD - FOUNDING"]
+  end
+
+  subgraph VAR["3. BTYD model variants"]
+    BGN05["Fader-Hardie-Lee 2005<br>BG/NBD (closed form)"]
+    RFM05["Fader-Hardie-Lee 2005<br>RFM and CLV iso-value"]
+    BGBB10["Fader-Hardie 2010<br>BG/BB (discrete, donations)"]
+    GG12["Bemmaor-Glady 2012<br>Gamma/Gompertz sudden death"]
+    GGG16["Platzer-Reutterer 2016<br>Pareto/GGG (timing)"]
+  end
+
+  subgraph EST["4. Estimation and benchmarking"]
+    ABE09["Abe 2009<br>HB Pareto/NBD (MCMC)"]
+    WUB08["Wubben-von Wangenheim 2008<br>heuristics baseline"]
+    SIM25["Simon 2025<br>MCMC vs MLE - SOURCE"]
+  end
+
+  subgraph CLV["5. CLV terrain"]
+    RK00["Reinartz-Kumar 2000<br>noncontractual profitability"]
+    GUP06["Gupta et al 2006<br>Modeling CLV (the map)"]
+  end
+
+  subgraph MLC["6. ML / deep learning for CLV"]
+    CHA17["Chamberlain et al 2017<br>CLV embeddings"]
+    WANG19["Wang et al 2019<br>ZILN deep CLV"]
+    VAL22["Valendin et al 2022<br>RNN customer-base"]
+    BAU21["Bauer-Jannach 2021<br>seq2seq CLV"]
+    XIE20["Xie 2020<br>Pareto/NBD vs neural net"]
+  end
+
+  subgraph CHU["7. Non-contractual churn classification"]
+    BUCK05["Buckinx-Van den Poel 2005<br>partial defection (FMCG)"]
+    MIG12["Migueis et al 2012<br>partial churn"]
+  end
+
+  subgraph EVA["8. Forecast evaluation and calibration"]
+    GR07["Gneiting-Raftery 2007<br>proper scoring rules"]
+    GBR07["Gneiting et al 2007<br>calibration and sharpness"]
+    CGH09["Czado et al 2009<br>PIT for count data"]
+    KUL18["Kuleshov et al 2018<br>calibrated regression"]
+  end
+
+  subgraph FRT["9. Frontier and this project"]
+    ULR26["Ulrich 2026<br>aliveness calibration"]
+    P1["Phase 1<br>calibration lens (ours)"]
+    P2["Phase 2<br>BTYD vs ML by calibration (ours)"]
+  end
+
+  FH09 --> SMC87
+  MC14 --> BGN05
+  EHR59 --> SMC87
+  DIR84 --> SMC87
+  SMC87 --> BGN05
+  SMC87 --> ABE09
+  SMC87 --> GG12
+  SMC87 --> GGG16
+  BGN05 --> RFM05
+  BGN05 --> BGBB10
+  BGN05 --> GGG16
+  RFM05 --> GUP06
+  ABE09 --> SIM25
+  BGN05 --> SIM25
+  WUB08 --> SIM25
+  RK00 --> GUP06
+  GUP06 --> CHA17
+  CHA17 --> WANG19
+  CHA17 --> VAL22
+  BGN05 --> VAL22
+  VAL22 --> BAU21
+  SMC87 --> XIE20
+  WANG19 --> P2
+  VAL22 --> P2
+  XIE20 --> P2
+  BUCK05 --> MIG12
+  BUCK05 --> P2
+  GR07 --> GBR07
+  GR07 --> CGH09
+  GBR07 --> CGH09
+  CGH09 --> P1
+  KUL18 --> P2
+  SIM25 --> P1
+  P1 --> P2
+  GGG16 --> P2
+  ULR26 --> P2
+
+  class SMC87 found
+  class FH09 crit
+  class EHR59 crit
+  class BGN05 crit
+  class ABE09 crit
+  class SIM25 crit
+  class GR07 crit
+  class CGH09 crit
+  class P1 ours
+  class P2 ours
+  class XIE20 screen
