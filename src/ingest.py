@@ -32,7 +32,7 @@ def elog_to_features(elog: pd.DataFrame, as_of: "pd.Timestamp | None" = None) ->
     else:
         elog = elog.drop_duplicates(["cust", "date"])
 
-    cal_end = np.datetime64(as_of) if as_of is not None else elog["date"].max()
+    cal_end = np.datetime64(as_of).astype("datetime64[D]") if as_of is not None else elog["date"].max()
     elog = elog[elog["date"] <= cal_end]
 
     rows = []

@@ -58,6 +58,28 @@ def test_elog_to_features_explicit_as_of():
     assert out.loc[1, "t_x"] == 1.0         # (01-08 - 01-01) / 7
 
 
+def test_elog_to_features_subday_as_of_truncates_to_day_granularity():
+    # Regression test: as_of parameter must be truncated to day granularity
+    # before computing T_cal, matching the elog's date truncation.
+    # Real callers pass pd.Timestamp.now() (with time-of-day), so this is critical.
+    midnight = pd.Timestamp("2024-01-15 00:00:00")
+    evening = pd.Timestamp("2024-01-15 23:59:59")
+    afternoon = pd.Timestamp("2024-01-15 18:00:00")
+
+    out_midnight = elog_to_features(_toy_elog(), as_of=midnight).set_index("cust")
+    out_evening = elog_to_features(_toy_elog(), as_of=evening).set_index("cust")
+    out_afternoon = elog_to_features(_toy_elog(), as_of=afternoon).set_index("cust")
+
+    # All should produce the same day-truncated results
+    assert out_midnight.loc[1, "T_cal"] == 2.0
+    assert out_evening.loc[1, "T_cal"] == 2.0
+    assert out_afternoon.loc[1, "T_cal"] == 2.0
+
+    # Verify they all match exactly
+    pd.testing.assert_frame_equal(out_midnight, out_evening)
+    pd.testing.assert_frame_equal(out_midnight, out_afternoon)
+
+
 def test_elog_to_features_matches_elog_to_summary_calibration_side():
     # elog_to_summary's calibration-window math (x, t_x, T_cal) is already
     # validated research code; when elog_to_features's as_of is set to the
