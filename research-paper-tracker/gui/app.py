@@ -98,7 +98,9 @@ class _DownloadTask(QRunnable):
             path, src = downloader.download_paper(
                 paper, self.cfg.path("download_dir"),
                 self.cfg.settings.get("scihub_mirrors") or [],
-                self.cfg.settings.get("proxy") or None)
+                self.cfg.settings.get("proxy") or None,
+                contact_email=self.cfg.settings.get("contact_email"),
+                unpaywall_enabled=self.cfg.settings.get("unpaywall_enabled", True))
             out.update(ok=True, path=str(path), source=src, title=row["title"])
         except Exception as e:
             out["error"] = str(e)
@@ -157,6 +159,19 @@ class Backend(QObject):
     @pyqtSlot(str, bool)
     def setHidden(self, uid: str, value: bool):
         self._set_state(uid, "hidden", value)
+
+    @pyqtSlot(str, bool)
+    def setAnalyzed(self, uid: str, value: bool):
+        self._set_state(uid, "analyzed", value)
+
+    @pyqtSlot(str, int)
+    def setUsedOverride(self, uid: str, value: int):
+        """value: 1 (force used), 0 (force not-used), -1 (clear -> auto-detect)."""
+        conn = store.connect(self.cfg.path("db_path"))
+        try:
+            store.set_used_override(conn, uid, None if value < 0 else bool(value))
+        finally:
+            conn.close()
 
     @pyqtSlot(str, str)
     def setTags(self, uid: str, tags: str):

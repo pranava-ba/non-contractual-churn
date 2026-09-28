@@ -1,6 +1,9 @@
 # Global settings for the research paper tracker.
 
 # Used for the OpenAlex "polite pool" (faster, more reliable) and any future email.
+# NOTE: this file is mirrored into github_upload_bundle/ for public upload
+# ([[bundle-is-a-build-artifact]]) -- swap this for a throwaway/project alias
+# before the next public sync if you'd rather not expose your real address.
 contact_email: pranavabaascaran@gmail.com
 
 # Refresh cadence (manual). The GUI shows "due today / overdue by N days" based on
@@ -18,7 +21,14 @@ max_lookback_days: 60
 # Absolute publication floor: never include papers published before this date.
 # The FIRST refresh does a comprehensive pull from here to today; later refreshes
 # just catch new papers. Blank ("") = no floor (rolling window only).
-min_publication_date: "2023-01-01"
+#
+# Lowered 2026-09-20 from "2023-01-01" to the field's origin (Ehrenberg's 1959 NBD)
+# so tracker.db is ONE unified corpus spanning the field's history -> present. The
+# pre-2023 history is populated directly by the citation-tree genealogy ingestion
+# (source='genealogy'; see deep_research/FIELD_GENEALOGY.md), NOT by keyword feeds:
+# ongoing keyword refreshes still use the rolling since-last-refresh window, so
+# this floor only governs the "never include before this date" guard.
+min_publication_date: "1959-01-01"
 
 # Default cap on papers surfaced per category per run (categories can override).
 # High for a literature survey — we want the whole corpus, not a top-N feed.
@@ -57,6 +67,15 @@ request_timeout: 30
 openalex_delay: 0.5           # gentler pacing to stay well under OpenAlex burst limits
 arxiv_delay: 3.0              # arXiv asks callers to wait ~3s between requests
 
+# --- "Used" auto-detect (Coverage page) ---
+# Manuscript .bib files to cross-reference each tracked paper's DOI/arXiv id/
+# normalized title against, to auto-badge it "used" (cited). Paths are relative to
+# this project's root (one level up from research-paper-tracker/). group keys must
+# match a category's `group:` in categories.yaml (nbd / causal).
+bib_files:
+  nbd: ../paper/refs_phase2.bib
+  causal: ../paper_gear2/refs_gear2.bib
+
 # Diversity: cap how many papers from one venue may fill a category's top-N, so
 # a high-volume journal (e.g. IEEE Access) can't crowd out other journals and arXiv
 # preprints. All of arXiv counts as one venue. Categories can override; if there
@@ -70,3 +89,27 @@ keyword_exclude_repositories: false
 # Ranking: tier assigned to sources not in the curated journal list.
 arxiv_tier: 4                 # preprints rank mid
 unknown_venue_tier: 9        # keyword hits from unlisted journals rank last on ties
+
+# --- Semantic Scholar (abstract backfill) ---
+# When OpenAlex AND Crossref both return no abstract for a candidate (common for
+# Elsevier opt-outs and many publishers that don't supply one to Crossref), look it
+# up by DOI/arXiv id on Semantic Scholar's free API (no key needed, generously
+# rate-limited) before matching -- a missing abstract otherwise silently weakens
+# title-only matching. Set false to disable.
+semanticscholar_backfill: true
+semanticscholar_delay: 1.0
+
+# --- Unpaywall (legal open-access fallback, tried before Sci-Hub) ---
+# OpenAlex's cached best_oa_location can lag; querying Unpaywall directly by DOI
+# sometimes finds a legal OA copy OpenAlex missed. Needs only contact_email (same
+# polite-pool convention as OpenAlex). Set false to skip straight to Sci-Hub.
+unpaywall_enabled: true
+
+# --- API call budget (soft cap, informational) ---
+# OpenAlex's keyless daily IP budget is documented (in tools/genealogy/) as ~1000
+# list-requests/day, reset at midnight UTC, shared across everything hitting the
+# API from this machine (including the one-time genealogy builder, if re-run).
+# `python -m src.run` warns once a source crosses this share of a day's budget;
+# it does not hard-stop the run.
+openalex_daily_budget: 1000
+openalex_budget_warn_frac: 0.5

@@ -1,3 +1,4 @@
 requests>=2.31
 feedparser>=6.0
 PyYAML>=6.0
+lxml>=5.0        # feedparser's more robust XML backend (else it falls back to sgmllib)

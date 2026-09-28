@@ -225,6 +225,31 @@ tr.open .detail{display:block}
 .barrow .bv{text-align:right;color:var(--text);font-weight:700}
 .chart-empty{color:var(--faint);font-size:13px;padding:8px 0}
 
+/* ---- coverage ---- */
+.covgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px;align-items:start}
+.covhead{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border)}
+.covhead h3{font-family:var(--head);font-size:15px;font-weight:700;margin:0;flex:1}
+.covhead .covsub{font-size:12px;color:var(--muted)}
+.covstats{display:flex;gap:14px;padding:10px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.covstat{font-size:12px;color:var(--muted)} .covstat b{color:var(--text);font-weight:700}
+table.covtbl{width:100%;border-collapse:collapse;font-size:12.5px}
+table.covtbl th{text-align:left;padding:8px 10px;font-size:10.5px;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--faint);font-weight:700;background:var(--card-2);border-bottom:1px solid var(--border)}
+table.covtbl td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+table.covtbl tr:last-child td{border-bottom:none}
+table.covtbl tr:hover{background:var(--glass-2)}
+td.covtitle{max-width:1px;width:100%}
+.covtitle .t{color:var(--text);font-weight:600;font-family:var(--head);font-size:13px;line-height:1.35;
+  display:block;text-decoration:none;cursor:pointer}
+.covtitle .t:hover{color:var(--accent);text-decoration:underline}
+.covtitle .m{color:var(--muted);font-size:11px;margin-top:3px}
+.usedbadge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
+  font-size:11px;font-weight:700;cursor:pointer;border:1px solid transparent;white-space:nowrap;user-select:none}
+.usedbadge.yes{background:var(--ok-bg);color:var(--ok);border-color:var(--ok)}
+.usedbadge.no{background:var(--never-bg);color:var(--faint);border-color:var(--border-2)}
+.usedbadge.override{box-shadow:0 0 0 1.5px var(--due) inset}
+.covempty{color:var(--faint);font-size:12.5px;padding:20px;text-align:center}
+
 /* ---- toast ---- */
 #toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);
   background:var(--card-2);border:1px solid var(--border-2);
@@ -246,6 +271,7 @@ tr.open .detail{display:block}
     <div class="tabs" role="tablist">
       <button class="tab active" data-tab="papers" role="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Papers</button>
       <button class="tab" data-tab="analytics" role="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Analytics</button>
+      <button class="tab" data-tab="coverage" role="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Coverage</button>
     </div>
     <span class="spacer"></span>
     <span id="pill" class="pill never"><span class="dot"></span><span id="pill-msg">Loading…</span></span>
@@ -283,6 +309,9 @@ tr.open .detail{display:block}
 
   <!-- ANALYTICS -->
   <div id="view-analytics" class="content hidden" style="flex:1"></div>
+
+  <!-- COVERAGE -->
+  <div id="view-coverage" class="content hidden" style="flex:1"></div>
 
   <div id="toast"></div>
 
@@ -507,12 +536,92 @@ function renderAnalytics(){
   v.appendChild(grid);
 }
 
+/* ---------- coverage (NBD vs Causal review-status board) ---------- */
+const COV_LABEL={nbd:"Non-Contractual / BTYD (Gear 1)", causal:"Causal ML / Uplift (Gear 2)"};
+function covCite(p){ const yr=(p.date||"").slice(0,4);
+  return [authorsShort(p.authors), yr?("("+yr+")"):"", p.venue].filter(Boolean).join(" · "); }
+function usedBadge(p){
+  const state = p.used===true?"yes":p.used===false?"no":"no";
+  const label = p.used===true?"Used ✓":p.used===false?"Not used":"Not used";
+  const b=el("span","usedbadge "+state+(p.used_override!==null?" override":""));
+  b.title = p.used_override!==null
+    ? "Manually set — click to cycle (auto → yes → no → auto)"
+    : "Auto-detected from the manuscript .bib — click to override";
+  b.textContent=label;
+  b.onclick=ev=>{ ev.stopPropagation();
+    const cur = p.used_override===true?1:p.used_override===false?0:-1;
+    const next = cur===-1?1:(cur===1?0:-1);
+    backend.setUsedOverride(p.uid, next);
+    p.used_override = next<0?null:!!next;
+    p.used = p.used_override!==null ? p.used_override : p.used_auto;
+    renderCoverage();
+  };
+  return b;
+}
+function covPanel(group, rows){
+  const card=el("div","card");
+  const head=el("div","covhead");
+  head.appendChild(el("h3",null,COV_LABEL[group]||group));
+  head.appendChild(el("span","covsub", rows.length+" tracked"));
+  card.appendChild(head);
+  const nRead=rows.filter(p=>p.read).length, nAnalyzed=rows.filter(p=>p.analyzed).length,
+        nUsed=rows.filter(p=>p.used===true).length;
+  const stats=el("div","covstats");
+  stats.appendChild(el("span","covstat")).innerHTML="<b>"+nRead+"</b>/"+rows.length+" read";
+  stats.appendChild(el("span","covstat")).innerHTML="<b>"+nAnalyzed+"</b>/"+rows.length+" analyzed";
+  stats.appendChild(el("span","covstat")).innerHTML="<b>"+nUsed+"</b>/"+rows.length+" cited in manuscript";
+  card.appendChild(stats);
+  if(!rows.length){ card.appendChild(el("div","covempty","No tracked (non-hidden) papers in this group yet.")); return card; }
+  const sorted=rows.slice().sort((a,b)=>{
+    if(a.read!==b.read) return a.read?1:-1;
+    if(a.analyzed!==b.analyzed) return a.analyzed?1:-1;
+    return (b.date||"").localeCompare(a.date||"");
+  });
+  const tbl=el("table","covtbl");
+  tbl.innerHTML="<thead><tr><th></th><th></th><th>Used</th><th>Paper</th></tr></thead>";
+  const tb=el("tbody");
+  sorted.forEach(p=>{
+    const tr=el("tr");
+    const rt=el("td"); const rtick=el("button","tick"+(p.read?" on":"")); rtick.title="Read";
+    rtick.innerHTML=ICON.check;
+    rtick.onclick=ev=>{ev.stopPropagation(); p.read=!p.read; backend.setRead(p.uid,p.read); renderCoverage();};
+    rt.appendChild(rtick); tr.appendChild(rt);
+    const at=el("td"); const atick=el("button","tick"+(p.analyzed?" on":"")); atick.title="Analyzed (deep-dived, not just skimmed)";
+    atick.innerHTML=ICON.check;
+    atick.onclick=ev=>{ev.stopPropagation(); p.analyzed=!p.analyzed; backend.setAnalyzed(p.uid,p.analyzed); renderCoverage();};
+    at.appendChild(atick); tr.appendChild(at);
+    const ut=el("td"); ut.appendChild(usedBadge(p)); tr.appendChild(ut);
+    const td=el("td","covtitle");
+    const a=el("a","t",p.title); a.href="#";
+    a.onclick=ev=>{ev.preventDefault();ev.stopPropagation(); if(p.url)backend.openUrl(p.url);};
+    td.appendChild(a); td.appendChild(el("div","m",covCite(p)));
+    tr.appendChild(td);
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb); card.appendChild(tbl);
+  return card;
+}
+function renderCoverage(){
+  const v=document.getElementById("view-coverage"); v.innerHTML="";
+  if(!SNAP || !SNAP.status.ever_run){ const e=el("div","empty");
+    const ic=el("div","ico"); ic.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 11l3 3L22 4"/></svg>';
+    e.appendChild(ic); e.appendChild(el("div","big","No coverage yet")); e.appendChild(el("div",null,"Refresh to start tracking papers."));
+    v.appendChild(e); return; }
+  const cov = SNAP.coverage||{nbd:[],causal:[]};
+  const grid=el("div","covgrid");
+  grid.appendChild(covPanel("nbd", cov.nbd||[]));
+  grid.appendChild(covPanel("causal", cov.causal||[]));
+  v.appendChild(grid);
+}
+
 /* ---------- tabs / sidebar ---------- */
 function switchTab(t){ curTab=t; LS.set("tab",t);
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===t));
   document.getElementById("view-papers").style.display = t==="papers"?"flex":"none";
   document.getElementById("view-analytics").classList.toggle("hidden",t!=="analytics");
+  document.getElementById("view-coverage").classList.toggle("hidden",t!=="coverage");
   if(t==="analytics" && SNAP) renderAnalytics();   // SNAP may be null during restore()
+  if(t==="coverage" && SNAP) renderCoverage();
 }
 function setCollapsed(v){ document.getElementById("side").classList.toggle("collapsed",v); LS.set("sidebar",v?"1":"0"); }
 
@@ -521,7 +630,8 @@ let toastT; function toast(msg){ const t=document.getElementById("toast"); t.tex
   t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),1800); }
 
 /* ---------- snapshot ---------- */
-function renderAll(){ renderStatus(); renderWeeks(); renderCats(); renderPapers(); if(curTab==="analytics")renderAnalytics(); }
+function renderAll(){ renderStatus(); renderWeeks(); renderCats(); renderPapers();
+  if(curTab==="analytics")renderAnalytics(); if(curTab==="coverage")renderCoverage(); }
 function setSnapshot(s){ SNAP=s;
   const err=document.getElementById("errbar");
   if(s.error){err.textContent="Last refresh error: "+s.error;err.classList.remove("hidden");}else err.classList.add("hidden");

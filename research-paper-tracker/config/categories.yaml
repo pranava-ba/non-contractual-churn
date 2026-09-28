@@ -27,6 +27,7 @@ categories:
   - key: non_contractual_churn
     label: "Non-Contractual Churn"
     important: true
+    group: nbd
     rank_by: relevance
     top_n: 150
     feeds:
@@ -46,11 +47,12 @@ categories:
   # 2 -------------------------------------------------------------------------
   - key: btyd_models
     label: "Buy-Till-You-Die Models (BG/NBD, Pareto/NBD)"
+    group: nbd
     rank_by: relevance
     top_n: 120
     feeds:
       - {source: openalex, mode: keyword, query: "buy till you die Pareto/NBD BG/NBD Gamma-Gamma customer purchase model"}
-      - {source: crossref, mode: keyword, query: "buy till you die Pareto NBD BG NBD Gamma-Gamma customer purchase"}
+      - {source: crossref, mode: keyword, query: "buy till you die Pareto NBD BG NBD Gamma-Gamma customer purchase model"}
     require_all:
       # Only unambiguous model names — "gamma-gamma" / "beta-geometric" alone pull in
       # physics/optics/stats papers; genuine Gamma-Gamma CLV work lands in CLV & RFM.
@@ -61,11 +63,12 @@ categories:
   # 3 -------------------------------------------------------------------------
   - key: clv_rfm
     label: "CLV & RFM in Non-Contractual Settings"
+    group: nbd
     rank_by: relevance
     top_n: 120
     feeds:
       - {source: openalex, mode: keyword, query: "customer lifetime value RFM recency frequency monetary non-contractual customer base"}
-      - {source: crossref, mode: keyword, query: "customer lifetime value RFM recency frequency non-contractual customer base"}
+      - {source: crossref, mode: keyword, query: "customer lifetime value RFM recency frequency monetary non-contractual customer base"}
     require_all:
       - [clv, cltv, "customer lifetime value", "customer equity", "lifetime value",
          rfm, "recency frequency", "recency, frequency", "customer-base analysis", "customer base analysis"]
@@ -81,11 +84,12 @@ categories:
   # 4 -------------------------------------------------------------------------
   - key: ml_noncontractual_churn
     label: "ML / Deep Learning for Non-Contractual Churn"
+    group: nbd
     rank_by: relevance
     top_n: 120
     feeds:
       - {source: openalex, mode: keyword, query: "machine learning deep learning non-contractual customer churn prediction lifetime value"}
-      - {source: crossref, mode: keyword, query: "machine learning deep learning non-contractual customer churn lifetime value"}
+      - {source: crossref, mode: keyword, query: "machine learning deep learning non-contractual customer churn prediction lifetime value"}
     require_all:
       - ["machine learning", "deep learning", "neural network", "gradient boosting",
          xgboost, "random forest", "survival analysis", ensemble, "predictive model*",
@@ -93,4 +97,82 @@ categories:
       - ["non-contractual", noncontractual, "non-subscription", "buy till you die",
          btyd, "pareto/nbd", "bg/nbd", "mbg/nbd", "latent attrition",
          "customer lifetime value", clv, cltv, "customer-base analysis"]
+    exclude: *offtopic
+
+  # 5 & 6 — INGESTION-ONLY buckets (added 2026-09-20) --------------------------
+  # These are NOT keyword-refreshed. They are populated directly by the citation-tree
+  # genealogy ingestion (source='genealogy'; see deep_research/FIELD_GENEALOGY.md and
+  # HISTORICAL_PROGRESSION.md). Empty feeds/require_all => a normal refresh surfaces
+  # nothing here, but the GUI still renders them as browsable buckets over tracker.db.
+  - key: foundations
+    label: "Foundations & Origins (seeds)"
+    group: nbd
+    rank_by: relevance
+    top_n: 200
+    feeds: []
+    require_all: []
+    exclude: []
+
+  - key: genealogy
+    label: "Genealogy — full citation tree"
+    # No `group:` here on purpose -- this bucket is the raw ~3,000-paper citation
+    # tree (incl. Tier C/D reference-tail and tools/off-topic archive, kept only
+    # for citation-graph completeness), not a review list. Giving it a group
+    # would flood the Coverage page with papers nobody's meant to read/analyze/cite.
+    # The actionable subset already has its own group'd categories: `foundations`
+    # (~38 seeds) and `core_reading` (~127 Tier-A spine). Still fully browsable on
+    # the Papers tab, and untouched in the DB -- this only affects Coverage.
+    rank_by: relevance
+    top_n: 4000
+    feeds: []
+    require_all: []
+    exclude: []
+
+  - key: core_reading
+    label: "Core reading (Tier A)"
+    important: true
+    group: nbd
+    rank_by: relevance
+    top_n: 300
+    feeds: []
+    require_all: []
+    exclude: []
+
+  # 7 & 8 — CAUSAL ML / UPLIFT (added 2026-09-20, Gear 2) -----------------------
+  # The prescriptive turn: heterogeneous treatment effects / uplift and their
+  # marketing/churn applications. Keyword-refreshed like categories 1-4. Kept APPLIED
+  # (group 2 forces a customer/marketing/churn signal) so the general HTE/econometrics
+  # firehose doesn't flood the tracker. See deep_research/CAUSAL_ML_LITERATURE.md.
+  - key: causal_ml_uplift
+    label: "Causal ML / Uplift — methods"
+    important: true
+    group: causal
+    rank_by: relevance
+    top_n: 120
+    feeds:
+      - {source: openalex, mode: keyword, query: "uplift modeling heterogeneous treatment effect CATE causal machine learning targeting"}
+      - {source: crossref, mode: keyword, query: "uplift modeling heterogeneous treatment effect CATE causal machine learning targeting"}
+      - {source: arxiv, mode: keyword, query: "uplift modeling heterogeneous treatment effect causal forest meta-learner"}
+    require_all:
+      - ["uplift model*", "uplift modeling", "treatment effect", "heterogeneous treatment",
+         cate, "conditional average treatment", "causal forest", "double machine learning",
+         "doubly robust", "meta-learner", "x-learner", "r-learner", "policy learning",
+         "individual treatment effect", qini]
+      - [customer, churn, retention, marketing, "lifetime value", clv, campaign,
+         targeting, promotion, "direct marketing", advertising, coupon]
+    exclude: *offtopic
+
+  - key: causal_ml_churn
+    label: "Causal ML / Uplift — churn & retention applications"
+    group: causal
+    rank_by: relevance
+    top_n: 120
+    feeds:
+      - {source: openalex, mode: keyword, query: "uplift modeling customer churn retention treatment effect prescriptive targeting"}
+      - {source: crossref, mode: keyword, query: "uplift modeling customer churn retention treatment effect prescriptive targeting"}
+    require_all:
+      - [uplift, "treatment effect", causal, "prescriptive analytics", "who to target",
+         "targeting policy", incremental, persuadable]
+      - [churn, retention, defection, "customer lifetime", clv, "customer base",
+         "non-contractual", "direct marketing", campaign]
     exclude: *offtopic
