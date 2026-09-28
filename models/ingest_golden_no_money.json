@@ -1,0 +1,26 @@
+{
+  "as_of": null,
+  "customers": [
+    {
+      "cust": "A",
+      "x": 3,
+      "t_x": 5.0,
+      "T_cal": 6.0,
+      "m_bar": null
+    },
+    {
+      "cust": "B",
+      "x": 0,
+      "t_x": 0.0,
+      "T_cal": 6.0,
+      "m_bar": null
+    },
+    {
+      "cust": "C",
+      "x": 2,
+      "t_x": 4.0,
+      "T_cal": 4.0,
+      "m_bar": null
+    }
+  ]
+}
