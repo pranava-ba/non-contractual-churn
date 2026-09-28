@@ -7,8 +7,11 @@
 #include <arrow/csv/api.h>
 #include <arrow/io/api.h>
 #include <arrow/util/value_parsing.h>  // arrow::TimestampParser (not re-exported by csv/api.h)
+#include <charconv>
 #include <cmath>
+#include <ctime>
 #include <map>
+#include <sstream>
 
 namespace pareto_nbd {
 namespace {
@@ -124,18 +127,44 @@ std::vector<DedupedRow> DedupSameDay(const std::shared_ptr<arrow::Table>& sorted
     return out;
 }
 
+// "YYYY-MM-DD" -> days since 1970-01-01, via the same epoch Arrow's
+// TimestampArray uses (seconds since epoch / kSecondsPerDay upstream).
+int64_t ParseIsoDateToDays(const std::string& iso_date) {
+    std::tm tm{};
+    std::istringstream ss(iso_date);
+    ss >> std::get_time(&tm, "%Y-%m-%d");
+    if (ss.fail()) {
+        throw IngestError("invalid as_of date (expected YYYY-MM-DD): " + iso_date);
+    }
+#ifdef _WIN32
+    time_t t = _mkgmtime(&tm);
+#else
+    time_t t = timegm(&tm);
+#endif
+    return static_cast<int64_t>(t) / kSecondsPerDay;
+}
+
 }  // namespace
 
 CustomerFeatures ingest_csv(const std::string& path,
                              std::optional<std::string> as_of_iso_date) {
-    (void)as_of_iso_date;   // Task 6 wires this through
-
     RawTable raw = LoadRawTable(path);
     auto sorted = SortByCustomerThenDate(raw.table);
     auto rows = DedupSameDay(sorted, raw.has_monetary);
 
-    int64_t as_of_day = rows.front().day;
-    for (const auto& r : rows) as_of_day = std::max(as_of_day, r.day);
+    int64_t as_of_day;
+    if (as_of_iso_date.has_value()) {
+        as_of_day = ParseIsoDateToDays(*as_of_iso_date);
+        rows.erase(std::remove_if(rows.begin(), rows.end(),
+                                   [as_of_day](const DedupedRow& r) { return r.day > as_of_day; }),
+                   rows.end());
+        if (rows.empty()) {
+            throw IngestError("no transactions on or before as_of date " + *as_of_iso_date);
+        }
+    } else {
+        as_of_day = rows.front().day;
+        for (const auto& r : rows) as_of_day = std::max(as_of_day, r.day);
+    }
 
     CustomerFeatures result;
     result.has_monetary = raw.has_monetary;
