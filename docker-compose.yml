@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pareto_nbd
+      POSTGRES_PASSWORD: pareto_nbd_dev
+      POSTGRES_DB: pareto_nbd
+    ports:
+      - "5432:5432"
+    volumes:
+      - pareto_nbd_pg_data:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  pareto_nbd_pg_data:

@@ -31,6 +31,7 @@ find_package(Arrow CONFIG REQUIRED)
 # global FunctionRegistry via arrow::compute::Initialize(), whose symbol
 # lives in this library, so it must be linked explicitly.
 find_package(ArrowCompute CONFIG REQUIRED)
+find_package(Drogon CONFIG REQUIRED)
 
 add_library(amortized_inference
     src/version.cpp
@@ -56,6 +57,9 @@ target_compile_definitions(main PRIVATE
     PROJECT_MODELS_DIR="${CMAKE_SOURCE_DIR}/../models"
 )
 
+add_executable(api_server src/api_main.cpp)
+target_link_libraries(api_server PRIVATE amortized_inference Drogon::Drogon)
+
 enable_testing()
 add_executable(unit_tests
     tests/test_version.cpp
@@ -66,8 +70,9 @@ add_executable(unit_tests
     tests/test_clv.cpp
     tests/test_conformal.cpp
     tests/test_ingest.cpp
+    tests/test_api_smoke.cpp
 )
-target_link_libraries(unit_tests PRIVATE amortized_inference Catch2::Catch2WithMain)
+target_link_libraries(unit_tests PRIVATE amortized_inference Catch2::Catch2WithMain Drogon::Drogon)
 target_compile_definitions(unit_tests PRIVATE
     PROJECT_MODELS_DIR="${CMAKE_SOURCE_DIR}/../models"
 )

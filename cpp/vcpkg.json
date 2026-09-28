@@ -9,6 +9,10 @@
     {
       "name": "arrow",
       "features": ["csv", "compute"]
+    },
+    {
+      "name": "drogon",
+      "features": ["postgres", "redis"]
     }
   ]
 }
