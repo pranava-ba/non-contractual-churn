@@ -42,6 +42,7 @@ add_library(amortized_inference
     src/clv.cpp
     src/conformal.cpp
     src/ingest.cpp
+    src/db.cpp
 )
 target_include_directories(amortized_inference PUBLIC include)
 target_link_libraries(amortized_inference PUBLIC
@@ -49,6 +50,7 @@ target_link_libraries(amortized_inference PUBLIC
     nlohmann_json::nlohmann_json
     "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>"
     "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,ArrowCompute::arrow_compute_static,ArrowCompute::arrow_compute_shared>"
+    Drogon::Drogon
 )
 
 add_executable(main src/main.cpp)
@@ -71,10 +73,12 @@ add_executable(unit_tests
     tests/test_conformal.cpp
     tests/test_ingest.cpp
     tests/test_api_smoke.cpp
+    tests/test_db.cpp
 )
 target_link_libraries(unit_tests PRIVATE amortized_inference Catch2::Catch2WithMain Drogon::Drogon)
 target_compile_definitions(unit_tests PRIVATE
     PROJECT_MODELS_DIR="${CMAKE_SOURCE_DIR}/../models"
+    PROJECT_ROOT_DIR="${CMAKE_SOURCE_DIR}/.."
 )
 include(CTest)
 add_test(NAME unit_tests COMMAND unit_tests)
