@@ -1,6 +1,7 @@
 #include "pareto_nbd/api_routes.hpp"
 
 #include <regex>
+#include <sstream>
 #include <string>
 
 #include "pareto_nbd/ingest.hpp"
@@ -205,6 +206,58 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
             nlohmann::json body{{"job_id", id}, {"page", page}, {"page_size", page_size},
                                  {"total", total}, {"customers", customers}};
             callback(JsonResponse(body, drogon::k200OK));
+        },
+        {drogon::Get});
+
+    // GET /jobs/{id}/export.csv: the full (unpaginated) forecast_results for a job as CSV.
+    // Same id-into-::uuid-cast pattern as /jobs/{id} and /jobs/{id}/results above, so the same
+    // format check runs first. Unlike /jobs/{id}/results, this route doesn't gate on job
+    // status -- an unknown or not-yet-done job id simply yields zero rows (header only), which
+    // is an acceptable/self-describing CSV rather than requiring a second error path.
+    drogon::app().registerHandler(
+        "/jobs/{id}/export.csv",
+        [db](const drogon::HttpRequestPtr&,
+             std::function<void(const drogon::HttpResponsePtr&)>&& callback,
+             const std::string& id) {
+            if (!IsValidUuidFormat(id)) {
+                callback(
+                    JsonResponse({{"error", "invalid job id format"}}, drogon::k400BadRequest));
+                return;
+            }
+
+            auto rows = db->execSqlSync(
+                "SELECT c.external_customer_id, fr.expected_purchases, fr.p_alive, "
+                "fr.clv_point, fr.clv_lower, fr.clv_upper "
+                "FROM forecast_results fr JOIN customers c ON c.id = fr.customer_id "
+                "WHERE fr.job_id = $1::uuid ORDER BY c.external_customer_id",
+                id);
+
+            std::ostringstream csv;
+            csv << "customer_id,expected_purchases,p_alive,clv_point,clv_lower,clv_upper\n";
+            for (const auto& row : rows) {
+                csv << row["external_customer_id"].as<std::string>() << ","
+                    << row["expected_purchases"].as<double>() << ","
+                    << row["p_alive"].as<double>() << ","
+                    << row["clv_point"].as<double>() << ","
+                    << row["clv_lower"].as<double>() << ","
+                    << row["clv_upper"].as<double>() << "\n";
+            }
+
+            // Drogon's drogon::ContentType enum (CT_*) has no built-in CSV entry -- the closest
+            // is CT_TEXT_PLAIN/CT_APPLICATION_OCTET_STREAM, neither of which is "text/csv".
+            // setContentTypeString (NOT addHeader("Content-Type", ...)) is required here:
+            // HttpResponseImpl::makeHeaderString always writes its own
+            // "content-type: <contentTypeString_>" line (defaulting to "text/html;
+            // charset=utf-8") ahead of the generic headers_ map, so addHeader("Content-Type",
+            // ...) would just add a SECOND, duplicate content-type header rather than replacing
+            // the default -- confirmed by reading HttpResponseImpl.cc's makeHeaderString/
+            // setContentTypeString. setContentTypeString updates that same contentTypeString_
+            // field directly, so only one content-type header is ever emitted.
+            auto resp = drogon::HttpResponse::newHttpResponse();
+            resp->setStatusCode(drogon::k200OK);
+            resp->setContentTypeString("text/csv");
+            resp->setBody(csv.str());
+            callback(resp);
         },
         {drogon::Get});
 }
