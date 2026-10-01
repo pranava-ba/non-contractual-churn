@@ -48,6 +48,7 @@
 // that real fits do not produce.  A non-finite final result throws the same type.
 #include "pareto_nbd/forecast.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <sstream>
@@ -187,12 +188,18 @@ double p_alive(const ParetoNbdParams& params, double x, double t_x, double T) {
 }
 
 double expected_purchases(const ParetoNbdParams& params, double x, double t_x, double T,
-                          double horizon) {
+                          double horizon, double precomputed_p_alive) {
     if (!(std::isfinite(horizon) && horizon >= 0.0)) {
         throw std::invalid_argument("horizon must be finite and >= 0");
     }
-    const double pa = p_alive(params, x, t_x, T);
-    const double out = pa * (params.r + x) / (params.alpha + T) *
+    // x, t_x, T, params still get the same cheap validation p_alive() would have done --
+    // only the expensive hypergeometric series inside p_alive is skipped.
+    validate(params, x, t_x, T);
+    if (!(std::isfinite(precomputed_p_alive) && precomputed_p_alive >= 0.0 &&
+          precomputed_p_alive <= 1.0)) {
+        throw std::invalid_argument("precomputed_p_alive must be finite and in [0, 1]");
+    }
+    const double out = precomputed_p_alive * (params.r + x) / (params.alpha + T) *
                        expected_active_time(params.s, params.beta, T, horizon);
     if (!std::isfinite(out)) {
         std::ostringstream msg;
@@ -203,6 +210,36 @@ double expected_purchases(const ParetoNbdParams& params, double x, double t_x, d
         throw ForecastOverflowError(msg.str());
     }
     return out;
+}
+
+double expected_purchases(const ParetoNbdParams& params, double x, double t_x, double T,
+                          double horizon) {
+    const double pa = p_alive(params, x, t_x, T);
+    return expected_purchases(params, x, t_x, T, horizon, pa);
+}
+
+bool WouldOverflow(const ParetoNbdParams& params, double t_x) {
+    if (!(std::isfinite(params.alpha) && params.alpha > 0.0 && std::isfinite(params.beta) &&
+          params.beta > 0.0 && std::isfinite(t_x) && t_x >= 0.0)) {
+        throw std::invalid_argument("alpha, beta must be finite and > 0, t_x finite and >= 0");
+    }
+    const double m = std::max(params.alpha, params.beta);
+    const double mn = std::min(params.alpha, params.beta);
+    const double z = (m - mn) / (m + t_x);
+    if (z == 0.0) return false;  // alpha == beta: log_series short-circuits, never overflows
+    const double one_minus_z = (mn + t_x) / (m + t_x);
+    const double tail_factor = z / one_minus_z;
+
+    // log_series's loop stops once term_n * tail_factor <= kSeriesRelTol * sum. It is proven
+    // there (see that function's comment) that term_n <= z^n always, and sum >= term_0 = 1
+    // always. Substituting those bounds gives a conservative, closed-form requirement on the
+    // term count N: if even z^N * tail_factor <= kSeriesRelTol holds (the hardest version of
+    // the real stopping condition, since it assumes the slowest-possible decay and the
+    // smallest-possible sum), the real loop has certainly already stopped by N terms too.
+    // Solving for N: N >= (log(kSeriesRelTol) - log(tail_factor)) / log(z).
+    const double log_z = std::log(z);  // z in (0, 1) here, so log_z < 0
+    const double required_n = (std::log(kSeriesRelTol) - std::log(tail_factor)) / log_z;
+    return required_n > static_cast<double>(kMaxSeriesTerms);
 }
 
 }  // namespace pareto_nbd

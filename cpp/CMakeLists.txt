@@ -46,6 +46,7 @@ add_library(amortized_inference
     src/storage.cpp
     src/queue.cpp
     src/forecast.cpp
+    src/worker.cpp
 )
 target_include_directories(amortized_inference PUBLIC include)
 target_link_libraries(amortized_inference PUBLIC
@@ -54,6 +55,11 @@ target_link_libraries(amortized_inference PUBLIC
     "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>"
     "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,ArrowCompute::arrow_compute_static,ArrowCompute::arrow_compute_shared>"
     Drogon::Drogon
+)
+# worker.cpp (inside this library) loads the committed ONNX/scaler artifacts, same convention
+# as the main/unit_tests executables below.
+target_compile_definitions(amortized_inference PRIVATE
+    PROJECT_MODELS_DIR="${CMAKE_SOURCE_DIR}/../models"
 )
 
 add_executable(main src/main.cpp)
@@ -64,6 +70,9 @@ target_compile_definitions(main PRIVATE
 
 add_executable(api_server src/api_main.cpp)
 target_link_libraries(api_server PRIVATE amortized_inference Drogon::Drogon)
+
+add_executable(worker src/worker_main.cpp)
+target_link_libraries(worker PRIVATE amortized_inference Drogon::Drogon)
 
 enable_testing()
 add_executable(unit_tests
@@ -81,6 +90,7 @@ add_executable(unit_tests
     tests/test_queue.cpp
     tests/test_uploads_endpoint.cpp
     tests/test_forecast.cpp
+    tests/test_worker.cpp
 )
 target_link_libraries(unit_tests PRIVATE amortized_inference Catch2::Catch2WithMain Drogon::Drogon)
 target_compile_definitions(unit_tests PRIVATE

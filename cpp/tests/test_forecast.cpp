@@ -132,6 +132,62 @@ TEST_CASE("extreme alpha/beta ratio throws ForecastOverflowError, not a wrong nu
     REQUIRE(checked >= 1);
 }
 
+TEST_CASE("expected_purchases(precomputed_p_alive) matches the single-argument overload",
+          "[forecast]") {
+    auto golden = load_golden();
+    int checked = 0;
+    for (const auto& c : golden["cases"]) {
+        if (c["cpp_expect_throw"].get<bool>()) continue;
+        const auto prm = params_of(c);
+        const double x = c["x"].get<double>(), t_x = c["t_x"].get<double>(),
+                     T = c["T"].get<double>(), h = c["horizon"].get<double>();
+        const double pa = pareto_nbd::p_alive(prm, x, t_x, T);
+        const double ep_one_arg = pareto_nbd::expected_purchases(prm, x, t_x, T, h);
+        const double ep_precomputed = pareto_nbd::expected_purchases(prm, x, t_x, T, h, pa);
+        INFO("case: " << c["name"].get<std::string>());
+        CHECK(ep_precomputed == ep_one_arg);
+        ++checked;
+    }
+    REQUIRE(checked >= 20);
+
+    // Garbage-in/garbage-out guard: the precomputed p_alive is trusted numerically but must
+    // still be a valid probability.
+    const pareto_nbd::ParetoNbdParams ok{0.7, 5.0, 0.6, 8.0};
+    REQUIRE_THROWS_AS(pareto_nbd::expected_purchases(ok, 3, 20.0, 40.0, 13.0, -0.1),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(pareto_nbd::expected_purchases(ok, 3, 20.0, 40.0, 13.0, 1.1),
+                      std::invalid_argument);
+    REQUIRE_THROWS_AS(
+        pareto_nbd::expected_purchases(ok, 3, 20.0, 40.0, 13.0, std::nan("")),
+        std::invalid_argument);
+}
+
+TEST_CASE("WouldOverflow agrees with whether p_alive actually throws", "[forecast]") {
+    // Known throw-case from models/forecast_golden.json ("C++ limitation: alpha/beta=1e-8,
+    // x=0 -> ForecastOverflowError"): extreme alpha/beta ratio at t_x=0.
+    const pareto_nbd::ParetoNbdParams overflow_params{0.7, 1e-6, 0.6, 100.0};
+    REQUIRE(pareto_nbd::WouldOverflow(overflow_params, 0.0));
+    REQUIRE_THROWS_AS(pareto_nbd::p_alive(overflow_params, 0.0, 0.0, 30.0),
+                      pareto_nbd::ForecastOverflowError);
+
+    // A normal, comfortably-converging case ("alpha<beta typical" from the same golden file,
+    // evaluated at t_x=0 -- the case WouldOverflow's signature checks).
+    const pareto_nbd::ParetoNbdParams normal_params{0.7, 5.0, 0.6, 8.0};
+    REQUIRE_FALSE(pareto_nbd::WouldOverflow(normal_params, 0.0));
+    REQUIRE_NOTHROW(pareto_nbd::p_alive(normal_params, 0.0, 0.0, 30.0));
+
+    // alpha == beta: the series short-circuits (z == 0), never overflows.
+    const pareto_nbd::ParetoNbdParams equal_params{0.7, 5.0, 0.6, 5.0};
+    REQUIRE_FALSE(pareto_nbd::WouldOverflow(equal_params, 0.0));
+    REQUIRE_NOTHROW(pareto_nbd::p_alive(equal_params, 0.0, 0.0, 30.0));
+
+    // Larger t_x makes the same extreme alpha/beta ratio easier to converge (the ratio
+    // (min+t_x)/(max+t_x) moves toward 1), so it should stop overflowing well before t_x
+    // reaches realistic magnitudes.
+    REQUIRE_FALSE(pareto_nbd::WouldOverflow(overflow_params, 25.0));
+    REQUIRE_NOTHROW(pareto_nbd::p_alive(overflow_params, 0.0, 25.0, 30.0));
+}
+
 TEST_CASE("p_alive / expected_purchases reject invalid input", "[forecast]") {
     const pareto_nbd::ParetoNbdParams ok{0.7, 5.0, 0.6, 8.0};
     using pareto_nbd::expected_purchases;
