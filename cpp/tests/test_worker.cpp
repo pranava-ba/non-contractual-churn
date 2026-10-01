@@ -106,25 +106,60 @@ TEST_CASE("ScoreCohortAndWriteResults skips an overflow-triggering customer with
     pareto_nbd::ScoreCohortAndWriteResults(job_id, db, cohort, overflow_params);
 
     auto result_rows = db->execSqlSync(
-        "SELECT c.external_customer_id, fr.expected_purchases, fr.p_alive "
+        "SELECT c.external_customer_id, fr.expected_purchases, fr.p_alive, fr.data_quality "
         "FROM forecast_results fr JOIN customers c ON c.id = fr.customer_id "
         "WHERE fr.job_id = $1::uuid ORDER BY c.external_customer_id", job_id);
 
-    // Only the two non-overflowing customers were scored; the overflow customer's row is
-    // deliberately absent (documented, intentional skip -- see worker.cpp), not a crash and
-    // not a fabricated 0.0 row.
-    REQUIRE(result_rows.size() == 2);
+    // Every customer in the cohort gets exactly one row now (Task 10): the overflow
+    // customer is no longer silently omitted, it gets a 'forecast_unavailable' row with
+    // placeholder 0.0 figures, while the two non-overflowing customers score normally.
+    REQUIRE(result_rows.size() == 3);
     for (const auto& row : result_rows) {
-        REQUIRE(row["external_customer_id"].as<std::string>() != "overflow-cust");
-        REQUIRE(row["p_alive"].as<double>() >= 0.0);
-        REQUIRE(row["p_alive"].as<double>() <= 1.0);
+        std::string ext_id = row["external_customer_id"].as<std::string>();
+        if (ext_id == "overflow-cust") {
+            REQUIRE(row["data_quality"].as<std::string>() == "forecast_unavailable");
+            REQUIRE(row["expected_purchases"].as<double>() == 0.0);
+            REQUIRE(row["p_alive"].as<double>() == 0.0);
+        } else {
+            REQUIRE(row["data_quality"].as<std::string>() == "ok");
+            REQUIRE(row["p_alive"].as<double>() >= 0.0);
+            REQUIRE(row["p_alive"].as<double>() <= 1.0);
+        }
     }
 
-    // The customer row itself is still created for the overflow customer (only the forecast
-    // is skipped, not the customer record).
+    // The customer row itself is still created for the overflow customer too.
     auto cust_rows = db->execSqlSync(
         "SELECT external_customer_id FROM customers WHERE business_id = $1::uuid "
         "AND external_customer_id = 'overflow-cust'",
         pareto_nbd::kDefaultBusinessId);
     REQUIRE(cust_rows.size() == 1);
+}
+
+TEST_CASE("ProcessOneJob flags single-transaction customers as insufficient_history", "[worker]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    if (!db) { SKIP("Postgres not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+
+    pareto_nbd::LocalDiskStorage storage("./data/test_worker_uploads2");
+    storage.Put("uploads/thin.csv",
+                "customer_id,transaction_date,amount\n"
+                "A,2024-01-01,10.0\nA,2024-01-08,5.0\n"  // A has repeats: sufficient
+                "B,2024-01-01,3.0\n");                    // B: single transaction, x=0
+
+    auto job_rows = db->execSqlSync(
+        "INSERT INTO jobs (business_id, status, upload_path) VALUES ($1::uuid, 'queued', 'uploads/thin.csv') RETURNING id",
+        pareto_nbd::kDefaultBusinessId);
+    std::string job_id = job_rows[0]["id"].as<std::string>();
+
+    pareto_nbd::ProcessOneJob(job_id, db, storage);
+
+    auto rows = db->execSqlSync(
+        "SELECT c.external_customer_id, fr.data_quality "
+        "FROM forecast_results fr JOIN customers c ON c.id = fr.customer_id "
+        "WHERE fr.job_id = $1::uuid ORDER BY c.external_customer_id", job_id);
+    REQUIRE(rows.size() == 2);
+    REQUIRE(rows[0]["external_customer_id"].as<std::string>() == "A");
+    REQUIRE(rows[0]["data_quality"].as<std::string>() == "ok");
+    REQUIRE(rows[1]["external_customer_id"].as<std::string>() == "B");
+    REQUIRE(rows[1]["data_quality"].as<std::string>() == "insufficient_history");
 }

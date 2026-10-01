@@ -70,13 +70,14 @@ void ScoreCohortAndWriteResults(const std::string& job_id, drogon::orm::DbClient
         // p_alive and expected_purchases are the real closed-form Pareto/NBD quantities
         // (forecast.hpp, Task 6b, independently verified to ~1e-12 relative accuracy). A
         // customer can still fail to score if this particular (alpha, beta, t_x)
-        // combination is beyond the fast series path's reach (ForecastOverflowError) --
-        // when that happens we deliberately do NOT write a forecast_results row for this
-        // customer rather than fabricate a number or fail the whole job. This customer is
-        // simply unscored for this job: Task 10 (not yet implemented) will add a
-        // data_quality column and more granular per-row flagging so this is visible to
-        // API consumers; for now, skipping the row is the documented, intentional
-        // behavior, not a silent bug.
+        // combination is beyond the fast series path's reach (ForecastOverflowError) -- a
+        // genuine NUMERICAL failure where the closed-form math cannot be evaluated. Per
+        // Task 10 / spec §6, every customer still gets exactly one forecast_results row:
+        // this case is flagged 'forecast_unavailable' with placeholder 0.0 figures (never
+        // fabricated/meaningful numbers -- data_quality is the signal to ignore them)
+        // rather than silently omitting the row. This is distinct from the
+        // 'insufficient_history' flag below, which is a STATISTICAL data-sufficiency
+        // signal for x==0 customers whose forecast CAN be computed.
         double p_alive_value = 0.0;
         double expected_purchases_value = 0.0;
         bool scored = false;
@@ -91,12 +92,29 @@ void ScoreCohortAndWriteResults(const std::string& job_id, drogon::orm::DbClient
                                        kForecastHorizonWeeks, p_alive_value);
                 scored = true;
             } catch (const ForecastOverflowError&) {
-                // Same documented, intentional skip as the pre-filtered branch above.
+                // Same documented, intentional 'forecast_unavailable' flag as the
+                // pre-filtered branch above.
             }
         }
-        if (!scored) { continue; }
 
-        double clv_point = have_clv ? nu[i] * expected_purchases_value : 0.0;
+        // data_quality: 'ok' for a normal, fully-scored forecast; 'insufficient_history'
+        // for a scored-but-low-confidence x==0 (single-transaction) customer per spec §6;
+        // 'forecast_unavailable' when the closed-form math itself could not be evaluated
+        // (ForecastOverflowError, including the cohort-level pre-filtered case above) --
+        // no real forecast numbers exist for this customer, so p_alive/expected_purchases/
+        // clv_point are 0.0 placeholders, not real figures.
+        std::string data_quality;
+        if (!scored) {
+            data_quality = "forecast_unavailable";
+            p_alive_value = 0.0;
+            expected_purchases_value = 0.0;
+        } else if (cohort.x[i] == 0.0) {
+            data_quality = "insufficient_history";
+        } else {
+            data_quality = "ok";
+        }
+
+        double clv_point = (scored && have_clv) ? nu[i] * expected_purchases_value : 0.0;
 
         nlohmann::json model_params{{"r", params.r}, {"alpha", params.alpha},
                                      {"s", params.s}, {"beta", params.beta}};
@@ -106,11 +124,11 @@ void ScoreCohortAndWriteResults(const std::string& job_id, drogon::orm::DbClient
 
         db->execSqlSync(
             "INSERT INTO forecast_results "
-            "(job_id, customer_id, expected_purchases, p_alive, clv_point, clv_lower, clv_upper, model_params) "
-            "VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb) "
+            "(job_id, customer_id, expected_purchases, p_alive, clv_point, clv_lower, clv_upper, model_params, data_quality) "
+            "VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb, $9) "
             "ON CONFLICT (job_id, customer_id) DO NOTHING",
             job_id, customer_id, expected_purchases_value, p_alive_value, clv_point,
-            clv_point, clv_point, model_params.dump());
+            clv_point, clv_point, model_params.dump(), data_quality);
     }
 }
 

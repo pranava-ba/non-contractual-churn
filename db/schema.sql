@@ -37,8 +37,19 @@ CREATE TABLE IF NOT EXISTS forecast_results (
     clv_upper           DOUBLE PRECISION NOT NULL,
     model_params        JSONB NOT NULL,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    data_quality        TEXT NOT NULL DEFAULT 'ok',
     UNIQUE (job_id, customer_id)
 );
+
+-- Idempotent for databases where forecast_results already existed before this column was
+-- added (CREATE TABLE IF NOT EXISTS above is a no-op against an existing table, so new
+-- columns must also be added here). Values: ok (normal forecast), insufficient_history
+-- (x==0 repeat purchases -- forecast computed but low-confidence), forecast_unavailable
+-- (closed-form math could not be evaluated for this customer -- see worker.cpp).
+-- NOTE: avoid the semicolon character anywhere in this comment block, even spelled out or
+-- quoted -- ApplySchema's statement splitter (db.cpp) naively splits the whole file on
+-- that one character, with no awareness of comments or string literals.
+ALTER TABLE forecast_results ADD COLUMN IF NOT EXISTS data_quality TEXT NOT NULL DEFAULT 'ok';
 
 -- Seed the single-tenant bootstrap row (spec §4.4.1: "populated with a single row until
 -- multi-tenancy ships"), with a fixed, well-known id so application code can hardcode it.
