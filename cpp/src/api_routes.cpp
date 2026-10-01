@@ -83,6 +83,30 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
             callback(JsonResponse({{"job_id", job_id}}, drogon::k200OK));
         },
         {drogon::Post});
+
+    // GET /jobs/{id}: status lookup for a previously-created job. `{id}` is a Drogon
+    // path-parameter placeholder -- any non-numeric name in braces binds positionally to the
+    // handler's trailing parameter (here, the id itself; see HttpControllersRouter::addHttpPath
+    // in the Drogon sources -- a bare name like `{id}` isn't looked up by name, it just has to
+    // be the first/only placeholder to line up with this handler's one trailing std::string).
+    drogon::app().registerHandler(
+        "/jobs/{id}",
+        [db](const drogon::HttpRequestPtr&,
+             std::function<void(const drogon::HttpResponsePtr&)>&& callback,
+             const std::string& id) {
+            auto rows = db->execSqlSync(
+                "SELECT status, error_reason FROM jobs WHERE id = $1::uuid", id);
+            if (rows.empty()) {
+                callback(JsonResponse({{"error", "job not found"}}, drogon::k404NotFound));
+                return;
+            }
+            nlohmann::json body{{"id", id}, {"status", rows[0]["status"].as<std::string>()}};
+            body["error_reason"] = rows[0]["error_reason"].isNull()
+                                        ? nlohmann::json(nullptr)
+                                        : nlohmann::json(rows[0]["error_reason"].as<std::string>());
+            callback(JsonResponse(body, drogon::k200OK));
+        },
+        {drogon::Get});
 }
 
 }  // namespace pareto_nbd
