@@ -47,6 +47,7 @@ add_library(amortized_inference
     src/queue.cpp
     src/forecast.cpp
     src/worker.cpp
+    src/api_routes.cpp
 )
 target_include_directories(amortized_inference PUBLIC include)
 target_link_libraries(amortized_inference PUBLIC
@@ -84,6 +85,7 @@ add_executable(unit_tests
     tests/test_clv.cpp
     tests/test_conformal.cpp
     tests/test_ingest.cpp
+    tests/test_server_fixture.cpp
     tests/test_api_smoke.cpp
     tests/test_db.cpp
     tests/test_storage.cpp

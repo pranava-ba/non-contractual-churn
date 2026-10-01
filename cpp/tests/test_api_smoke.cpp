@@ -1,34 +1,19 @@
 #include <catch2/catch_test_macros.hpp>
+#include <drogon/HttpClient.h>
 #include <drogon/drogon.h>
-#include <drogon/HttpAppFramework.h>
-#include <thread>
-#include <chrono>
 
-// Starts the Drogon event loop on a background thread for the duration of this one test
-// case, hits it with a real HTTP client, and shuts it down -- proves the Drogon dependency
-// actually links and an app can listen and respond, before any later task builds on it.
+#include "test_server_fixture.hpp"
+
+// Proves the shared drogon::app() instance (started once for this whole test binary by
+// test_server_fixture.cpp's Catch2 global listener, which already called RegisterApiRoutes
+// and so already registered /healthz) is actually up and serving real HTTP requests. This
+// test case no longer starts, listens on, or stops its own drogon::app() -- see Task 6.5's
+// test_server_fixture.cpp for why a second per-test-case lifecycle isn't safe.
 TEST_CASE("Drogon app starts and answers a request", "[api][smoke]") {
-    drogon::app().addListener("127.0.0.1", 18080);
-    drogon::app().registerHandler(
-        "/healthz",
-        [](const drogon::HttpRequestPtr&,
-           std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
-            auto resp = drogon::HttpResponse::newHttpResponse();
-            resp->setBody("ok");
-            callback(resp);
-        },
-        {drogon::Get});
-
-    std::thread server_thread([]() { drogon::app().run(); });
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));  // let the loop start
-
-    auto client = drogon::HttpClient::newHttpClient("http://127.0.0.1:18080");
+    auto client = drogon::HttpClient::newHttpClient(pareto_nbd::test::TestServerBaseUrl());
     auto req = drogon::HttpRequest::newHttpRequest();
     req->setPath("/healthz");
     auto [result, response] = client->sendRequest(req, 5.0);
     REQUIRE(result == drogon::ReqResult::Ok);
     REQUIRE(response->getBody() == "ok");
-
-    drogon::app().getLoop()->queueInLoop([]() { drogon::app().quit(); });
-    server_thread.join();
 }
