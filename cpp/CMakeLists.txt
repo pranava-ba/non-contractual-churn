@@ -44,6 +44,7 @@ add_library(amortized_inference
     src/ingest.cpp
     src/db.cpp
     src/storage.cpp
+    src/queue.cpp
 )
 target_include_directories(amortized_inference PUBLIC include)
 target_link_libraries(amortized_inference PUBLIC
@@ -76,6 +77,7 @@ add_executable(unit_tests
     tests/test_api_smoke.cpp
     tests/test_db.cpp
     tests/test_storage.cpp
+    tests/test_queue.cpp
 )
 target_link_libraries(unit_tests PRIVATE amortized_inference Catch2::Catch2WithMain Drogon::Drogon)
 target_compile_definitions(unit_tests PRIVATE
