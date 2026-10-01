@@ -45,7 +45,9 @@ CREATE TABLE IF NOT EXISTS forecast_results (
 -- added (CREATE TABLE IF NOT EXISTS above is a no-op against an existing table, so new
 -- columns must also be added here). Values: ok (normal forecast), insufficient_history
 -- (x==0 repeat purchases -- forecast computed but low-confidence), forecast_unavailable
--- (closed-form math could not be evaluated for this customer -- see worker.cpp).
+-- (closed-form math could not be evaluated for this customer -- see worker.cpp),
+-- clv_unavailable (forecast is fine but the Gamma-Gamma CLV is undefined for this customer,
+-- posterior shape at or below 1 -- clv columns hold 0.0 placeholders, see worker.cpp).
 -- NOTE: avoid the semicolon character anywhere in this comment block, even spelled out or
 -- quoted -- ApplySchema's statement splitter (db.cpp) naively splits the whole file on
 -- that one character, with no awareness of comments or string literals.

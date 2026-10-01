@@ -47,6 +47,9 @@ TEST_CASE("GET /jobs/{id}/results paginates forecast_results for a done job", "[
     // external_customer_id is only unique per (business_id, external_customer_id) -- since
     // kDefaultBusinessId and this test's db rows persist across runs (no per-test cleanup),
     // scope each customer id by this run's fresh job_id so repeated runs never collide.
+    // Each row gets a distinct data_quality flag so the response is checked to carry the
+    // per-row value through, not a constant.
+    const char* kQualities[] = {"ok", "clv_unavailable", "forecast_unavailable"};
     for (int i = 0; i < 3; ++i) {
         auto cust_rows = db->execSqlSync(
             "INSERT INTO customers (business_id, external_customer_id, first_seen_job_id) "
@@ -55,9 +58,9 @@ TEST_CASE("GET /jobs/{id}/results paginates forecast_results for a done job", "[
         db->execSqlSync(
             "INSERT INTO forecast_results "
             "(job_id, customer_id, expected_purchases, p_alive, clv_point, clv_lower, "
-            "clv_upper, model_params) "
-            "VALUES ($1::uuid, $2::uuid, 1.0, 0.5, 10.0, 8.0, 12.0, '{}'::jsonb)",
-            job_id, cust_rows[0]["id"].as<std::string>());
+            "clv_upper, model_params, data_quality) "
+            "VALUES ($1::uuid, $2::uuid, 1.0, 0.5, 10.0, 8.0, 12.0, '{}'::jsonb, $3)",
+            job_id, cust_rows[0]["id"].as<std::string>(), std::string(kQualities[i]));
     }
 
     // page_size (2) smaller than the total row count (3): confirms `total` reflects the full
@@ -77,6 +80,8 @@ TEST_CASE("GET /jobs/{id}/results paginates forecast_results for a done job", "[
     auto body2 = nlohmann::json::parse(response2->getBody());
     REQUIRE(body2["total"] == 3);
     REQUIRE(body2["customers"].size() == 1);
+    REQUIRE(body2["customers"][0]["customer_id"] == "cust-" + job_id + "-2");
+    REQUIRE(body2["customers"][0]["data_quality"] == "forecast_unavailable");
 
     const auto& customer = body["customers"][0];
     REQUIRE(customer["customer_id"] == "cust-" + job_id + "-0");
@@ -85,6 +90,9 @@ TEST_CASE("GET /jobs/{id}/results paginates forecast_results for a done job", "[
     REQUIRE(customer["clv_point"] == 10.0);
     REQUIRE(customer["clv_lower"] == 8.0);
     REQUIRE(customer["clv_upper"] == 12.0);
+    // spec §6: the per-row data-quality flag reaches the client.
+    REQUIRE(customer["data_quality"] == "ok");
+    REQUIRE(body["customers"][1]["data_quality"] == "clv_unavailable");
 }
 
 TEST_CASE("GET /jobs/{id}/results returns 404 for an unknown job and for a not-done job",

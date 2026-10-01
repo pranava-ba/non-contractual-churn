@@ -103,7 +103,9 @@ TEST_CASE("Full loop: upload -> worker processes -> results are queryable over r
     // Step 3: dequeue the real job id from the real Redis queue -- proves POST /uploads's
     // EnqueueJob call actually round-tripped through Redis (same assertion style
     // test_uploads_endpoint.cpp uses), not just that it didn't throw.
-    auto dequeued = pareto_nbd::DequeueJob(redis, 5);
+    // The shared fixture's /uploads route pushes onto kTestJobQueueKey (never the production
+    // queue a live `worker` process consumes), so dequeue from there.
+    auto dequeued = pareto_nbd::DequeueJob(redis, 5, pareto_nbd::kTestJobQueueKey);
     REQUIRE(dequeued.has_value());
     REQUIRE(*dequeued == job_id);
 
@@ -125,9 +127,8 @@ TEST_CASE("Full loop: upload -> worker processes -> results are queryable over r
     // Direct-DB check of this cohort's known, already-verified classification (same style as
     // test_worker.cpp's first test case, which uses this identical cohort): A has repeat
     // purchases (x>0) so scores data_quality='ok'; B is a single-transaction customer (x==0)
-    // so scores data_quality='insufficient_history'. The public results/export endpoints
-    // below don't expose data_quality, so this is the only way to confirm that specific,
-    // known classification landed correctly after going through the real HTTP+Redis path.
+    // so scores data_quality='insufficient_history'. Steps 5 and 6 below then confirm the
+    // same flags also reach the client through the public results/export endpoints.
     {
         auto rows = db->execSqlSync(
             "SELECT c.external_customer_id, fr.data_quality, fr.p_alive, fr.expected_purchases "
@@ -165,6 +166,10 @@ TEST_CASE("Full loop: upload -> worker processes -> results are queryable over r
         const auto& b = body["customers"][1];
         REQUIRE(a["customer_id"] == "A");
         REQUIRE(b["customer_id"] == "B");
+        // spec §6: the per-row data-quality flag reaches the client, so B's low-confidence
+        // single-transaction forecast is distinguishable from A's normal one.
+        REQUIRE(a["data_quality"] == "ok");
+        REQUIRE(b["data_quality"] == "insufficient_history");
         for (const auto& customer : body["customers"]) {
             double p_alive = customer["p_alive"].get<double>();
             REQUIRE(p_alive >= 0.0);
@@ -187,14 +192,22 @@ TEST_CASE("Full loop: upload -> worker processes -> results are queryable over r
         REQUIRE(std::string(resp->getHeader("content-type")) == "text/csv");
 
         std::string body = std::string(resp->getBody());
-        REQUIRE(body.find("customer_id,expected_purchases,p_alive,clv_point,clv_lower,clv_upper\n") ==
-                0);
+        REQUIRE(body.find("customer_id,expected_purchases,p_alive,clv_point,clv_lower,clv_upper,"
+                          "data_quality\n") == 0);
 
-        auto a_row = body.find("A,");
-        auto b_row = body.find("B,");
+        auto a_row = body.find("\nA,");
+        auto b_row = body.find("\nB,");
         REQUIRE(a_row != std::string::npos);
         REQUIRE(b_row != std::string::npos);
         REQUIRE(a_row < b_row);  // same ORDER BY external_customer_id as /results
+
+        // Each row ends with its data_quality column.
+        auto a_end = body.find('\n', a_row + 1);
+        auto b_end = body.find('\n', b_row + 1);
+        std::string a_line = body.substr(a_row + 1, a_end - a_row - 1);
+        std::string b_line = body.substr(b_row + 1, b_end - b_row - 1);
+        REQUIRE(a_line.substr(a_line.rfind(',') + 1) == "ok");
+        REQUIRE(b_line.substr(b_line.rfind(',') + 1) == "insufficient_history");
 
         // Exactly 3 lines: header + A + B, nothing extra from a prior run leaking in (every
         // row is scoped to this run's fresh job_id).

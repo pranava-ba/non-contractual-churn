@@ -4,13 +4,14 @@
 #include <fstream>
 #include <future>
 #include <sstream>
+#include <stdexcept>
 #include <thread>
 
 namespace pareto_nbd {
 
-drogon::orm::DbClientPtr ConnectDb(const std::string& conn_str) {
+drogon::orm::DbClientPtr ConnectDb(const std::string& conn_str, size_t pool_size) {
     try {
-        auto db = drogon::orm::DbClient::newPgClient(conn_str, 1 /* connection pool size */);
+        auto db = drogon::orm::DbClient::newPgClient(conn_str, pool_size == 0 ? 1 : pool_size);
         // newPgClient connects asynchronously; force a real round trip with a short
         // deadline so an unreachable Postgres fails fast instead of hanging.
         auto promise = std::make_shared<std::promise<bool>>();
@@ -31,6 +32,9 @@ drogon::orm::DbClientPtr ConnectDb(const std::string& conn_str) {
 
 void ApplySchema(drogon::orm::DbClientPtr db, const std::string& schema_sql_path) {
     std::ifstream f(schema_sql_path);
+    if (!f) {
+        throw std::runtime_error("ApplySchema: cannot open schema file '" + schema_sql_path + "'");
+    }
     std::stringstream buf;
     buf << f.rdbuf();
     std::string sql = buf.str();

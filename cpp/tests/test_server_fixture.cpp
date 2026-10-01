@@ -48,7 +48,14 @@ public:
         auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
         auto redis = pareto_nbd::ConnectRedis(pareto_nbd::kTestRedisUri);
 
-        pareto_nbd::RegisterApiRoutes(storage, db, redis);
+        // kTestJobQueueKey, NOT the production kJobQueueKey: POST /uploads in this test
+        // binary must never feed (or be drained by) a real `worker` process sharing Redis.
+        pareto_nbd::RegisterApiRoutes(storage, db, redis, pareto_nbd::kTestJobQueueKey);
+        // Mirror api_main.cpp's production server settings (see its comments for the
+        // reasoning) so endpoint tests exercise the same body-size limit and multi-threaded
+        // event loop the real binary runs with.
+        drogon::app().setClientMaxBodySize(100 * 1024 * 1024);
+        drogon::app().setThreadNum(4);
         drogon::app().addListener("127.0.0.1", 18080);
 
         server_thread_ = std::thread([]() { drogon::app().run(); });

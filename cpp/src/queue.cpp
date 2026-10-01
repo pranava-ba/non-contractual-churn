@@ -57,30 +57,48 @@ drogon::nosql::RedisClientPtr ConnectRedis(const std::string& redis_uri) {
     }
 }
 
-void EnqueueJob(drogon::nosql::RedisClientPtr redis, const std::string& job_id) {
-    auto promise = std::make_shared<std::promise<void>>();
+bool EnqueueJob(drogon::nosql::RedisClientPtr redis, const std::string& job_id,
+                const std::string& queue_key) {
+    if (!redis) { return false; }
+    auto promise = std::make_shared<std::promise<bool>>();
     auto future = promise->get_future();
     redis->execCommandAsync(
-        [promise](const drogon::nosql::RedisResult&) { promise->set_value(); },
-        [promise](const drogon::nosql::RedisException&) { promise->set_value(); },
-        "RPUSH %s %s", kJobQueueKey.c_str(), job_id.c_str());
-    future.wait();
+        [promise](const drogon::nosql::RedisResult&) { promise->set_value(true); },
+        // An error reply (e.g. WRONGTYPE) or a broken connection both land here -- previously
+        // this completed the promise exactly like success, so a failed RPUSH was invisible.
+        [promise](const drogon::nosql::RedisException&) { promise->set_value(false); },
+        "RPUSH %s %s", queue_key.c_str(), job_id.c_str());
+    // Bounded wait: a Redis that silently stops responding must not hang the request thread
+    // forever. The promise is shared_ptr-owned, so a late callback after this returns is safe.
+    if (future.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
+        return false;
+    }
+    return future.get();
 }
 
-std::optional<std::string> DequeueJob(drogon::nosql::RedisClientPtr redis, int timeout_seconds) {
+std::optional<std::string> DequeueJob(drogon::nosql::RedisClientPtr redis, int timeout_seconds,
+                                      const std::string& queue_key) {
     auto promise = std::make_shared<std::promise<std::optional<std::string>>>();
     auto future = promise->get_future();
     redis->execCommandAsync(
         [promise](const drogon::nosql::RedisResult& r) {
             // BLPOP replies with a 2-element array [key, value] on success, nil on timeout.
-            if (r.type() == drogon::nosql::RedisResultType::kNil) {
+            // Anything else unexpected is treated like a timeout rather than letting
+            // asArray()/asString() throw on Redis's own loop thread (which would leave this
+            // promise unset and block the caller forever).
+            if (r.type() != drogon::nosql::RedisResultType::kArray) {
                 promise->set_value(std::nullopt);
-            } else {
-                promise->set_value(r.asArray()[1].asString());
+                return;
             }
+            auto arr = r.asArray();
+            if (arr.size() < 2 || arr[1].type() != drogon::nosql::RedisResultType::kString) {
+                promise->set_value(std::nullopt);
+                return;
+            }
+            promise->set_value(arr[1].asString());
         },
         [promise](const drogon::nosql::RedisException&) { promise->set_value(std::nullopt); },
-        "BLPOP %s %d", kJobQueueKey.c_str(), timeout_seconds);
+        "BLPOP %s %d", queue_key.c_str(), timeout_seconds);
     return future.get();
 }
 

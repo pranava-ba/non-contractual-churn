@@ -1,4 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
+
+#include <cmath>
+#include <string>
+#include <vector>
+
+#include "pareto_nbd/clv.hpp"
 #include "pareto_nbd/db.hpp"
 #include "pareto_nbd/forecast.hpp"
 #include "pareto_nbd/storage.hpp"
@@ -162,4 +168,148 @@ TEST_CASE("ProcessOneJob flags single-transaction customers as insufficient_hist
     REQUIRE(rows[0]["data_quality"].as<std::string>() == "ok");
     REQUIRE(rows[1]["external_customer_id"].as<std::string>() == "B");
     REQUIRE(rows[1]["data_quality"].as<std::string>() == "insufficient_history");
+}
+
+TEST_CASE("ScoreCohortAndWriteResults never writes a NaN CLV: a degenerate Gamma-Gamma fit "
+          "flags 'clv_unavailable' with 0.0 placeholders",
+          "[worker][clv]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    if (!db) { SKIP("Postgres not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+
+    // 20 single-repeat (x=1) customers whose mean spends span ~7 orders of magnitude (the
+    // 2.5%..97.5% quantiles of the Gamma-Gamma marginal for p=0.3, q=0.4), plus one x=4
+    // customer and one x=0 customer. Spend this dispersed drives fit_gamma_gamma to p+q < 1
+    // (verified below), so posterior_mean_nu's Inverse-Gamma shape p*x+q is <= 1 -- i.e. NaN
+    // -- for every x=1 customer (and q <= 1 makes it NaN for the x=0 one too), while the x=4
+    // customer's shape 4p+q > 1 keeps a finite CLV.
+    const std::vector<double> spends = {0.01,   0.07,   0.41,   1.26,    2.93,    5.8,      10.36,
+                                        17.26,  27.44,  42.35,  64.28,   97.14,   147.96,   230.37,
+                                        373.45, 647.51, 1256.0, 2977.7, 10806.83, 169190.2};
+    pareto_nbd::CustomerFeatures cohort;
+    cohort.has_monetary = true;
+    for (size_t i = 0; i < spends.size(); ++i) {
+        cohort.customer_id.push_back("nan-clv-x1-" + std::to_string(i));
+        cohort.x.push_back(1.0);
+        cohort.t_x.push_back(10.0);
+        cohort.T_cal.push_back(30.0);
+        cohort.m_bar.push_back(spends[i]);
+    }
+    cohort.customer_id.push_back("nan-clv-x4");
+    cohort.x.push_back(4.0);
+    cohort.t_x.push_back(25.0);
+    cohort.T_cal.push_back(30.0);
+    cohort.m_bar.push_back(50.0);
+    cohort.customer_id.push_back("nan-clv-x0");
+    cohort.x.push_back(0.0);
+    cohort.t_x.push_back(0.0);
+    cohort.T_cal.push_back(30.0);
+    cohort.m_bar.push_back(0.0);
+
+    // Premise checks -- on the real C++ fit, not an assumption carried over from Python.
+    const auto gg = pareto_nbd::fit_gamma_gamma(cohort.x, cohort.m_bar);
+    INFO("fitted p=" << gg.p << " q=" << gg.q << " v=" << gg.v);
+    REQUIRE(gg.p + gg.q <= 1.0);
+    REQUIRE(gg.q <= 1.0);
+    REQUIRE(4.0 * gg.p + gg.q > 1.0);
+    const auto nu = pareto_nbd::posterior_mean_nu(cohort.x, cohort.m_bar, gg);
+    REQUIRE(std::isnan(nu[0]));
+    REQUIRE(std::isfinite(nu[spends.size()]));  // the x=4 customer
+
+    // Ordinary, non-overflowing population parameters so every customer scores (the CLV
+    // path is what's under test here, not the forecast path).
+    const pareto_nbd::ParetoNbdParams params{0.7, 10.0, 0.6, 10.0};
+    REQUIRE_FALSE(pareto_nbd::WouldOverflow(params, 0.0));
+
+    // These fixed external ids are upserted by the worker (ON CONFLICT DO UPDATE on
+    // customers), and forecast_results rows are keyed by this run's fresh job_id, so reruns
+    // never collide.
+    auto rows = db->execSqlSync(
+        "INSERT INTO jobs (business_id, status, upload_path) "
+        "VALUES ($1::uuid, 'queued', 'uploads/unused.csv') RETURNING id",
+        pareto_nbd::kDefaultBusinessId);
+    std::string job_id = rows[0]["id"].as<std::string>();
+
+    pareto_nbd::ScoreCohortAndWriteResults(job_id, db, cohort, params);
+
+    auto result_rows = db->execSqlSync(
+        "SELECT c.external_customer_id, fr.clv_point, fr.clv_lower, fr.clv_upper, "
+        "fr.p_alive, fr.data_quality, "
+        "(fr.clv_point = 'NaN'::float8 OR fr.clv_lower = 'NaN'::float8 OR "
+        " fr.clv_upper = 'NaN'::float8) AS has_nan "
+        "FROM forecast_results fr JOIN customers c ON c.id = fr.customer_id "
+        "WHERE fr.job_id = $1::uuid",
+        job_id);
+    REQUIRE(result_rows.size() == spends.size() + 2);
+
+    size_t clv_unavailable = 0;
+    for (const auto& row : result_rows) {
+        const std::string ext_id = row["external_customer_id"].as<std::string>();
+        const std::string dq = row["data_quality"].as<std::string>();
+        INFO("customer " << ext_id << " data_quality=" << dq);
+        // No NaN reached the database for anyone (checked on the Postgres side too).
+        REQUIRE_FALSE(row["has_nan"].as<bool>());
+        REQUIRE(std::isfinite(row["clv_point"].as<double>()));
+        REQUIRE(std::isfinite(row["clv_lower"].as<double>()));
+        REQUIRE(std::isfinite(row["clv_upper"].as<double>()));
+
+        if (ext_id == "nan-clv-x4") {
+            // Finite posterior mean: a real CLV, normal 'ok' row.
+            REQUIRE(dq == "ok");
+            REQUIRE(row["clv_point"].as<double>() > 0.0);
+        } else if (ext_id == "nan-clv-x0") {
+            // Also NaN (q <= 1), but 'insufficient_history' is the more specific reason and
+            // is kept -- never overwritten by 'clv_unavailable'.
+            REQUIRE(dq == "insufficient_history");
+            REQUIRE(row["clv_point"].as<double>() == 0.0);
+        } else {
+            // Would have been 'ok' (x>0, scored): flagged, with 0.0 placeholders, while the
+            // forecast itself (p_alive) is still a real figure.
+            REQUIRE(dq == "clv_unavailable");
+            REQUIRE(row["clv_point"].as<double>() == 0.0);
+            REQUIRE(row["clv_lower"].as<double>() == 0.0);
+            REQUIRE(row["clv_upper"].as<double>() == 0.0);
+            REQUIRE(row["p_alive"].as<double>() > 0.0);
+            ++clv_unavailable;
+        }
+    }
+    REQUIRE(clv_unavailable == spends.size());
+}
+
+TEST_CASE("ProcessOneJob does not throw for a malformed (non-UUID) job id", "[worker]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    if (!db) { SKIP("Postgres not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+
+    pareto_nbd::LocalDiskStorage storage("./data/test_worker_uploads");
+    // The exact input the final review pushed onto the real queue: previously the very first
+    // statement (UPDATE ... WHERE id = 'not-a-uuid'::uuid) threw outside any try/catch, and
+    // the exception escaped ProcessOneJob and killed the worker process. Now the whole body is
+    // guarded, and the best-effort failure marking (which ALSO throws for this id) is
+    // swallowed and logged.
+    REQUIRE_NOTHROW(pareto_nbd::ProcessOneJob("not-a-uuid", db, storage));
+    // A well-formed id that matches no job is a quiet no-op, too.
+    REQUIRE_NOTHROW(
+        pareto_nbd::ProcessOneJob("00000000-0000-0000-0000-0000000000ff", db, storage));
+}
+
+TEST_CASE("ProcessOneJob marks a job failed (not a crash) when its upload file is missing",
+          "[worker]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    if (!db) { SKIP("Postgres not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+
+    pareto_nbd::LocalDiskStorage storage("./data/test_worker_uploads");
+    auto rows = db->execSqlSync(
+        "INSERT INTO jobs (business_id, status, upload_path) "
+        "VALUES ($1::uuid, 'queued', 'uploads/definitely-does-not-exist.csv') RETURNING id",
+        pareto_nbd::kDefaultBusinessId);
+    std::string job_id = rows[0]["id"].as<std::string>();
+
+    REQUIRE_NOTHROW(pareto_nbd::ProcessOneJob(job_id, db, storage));
+
+    auto job_rows =
+        db->execSqlSync("SELECT status, error_reason FROM jobs WHERE id = $1::uuid", job_id);
+    REQUIRE(job_rows[0]["status"].as<std::string>() == "failed");
+    REQUIRE_FALSE(job_rows[0]["error_reason"].isNull());
 }

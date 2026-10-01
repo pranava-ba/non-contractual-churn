@@ -9,6 +9,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cmath>
+#include <iostream>
+
 namespace pareto_nbd {
 namespace {
 
@@ -19,12 +22,29 @@ namespace {
 // this a per-job parameter (e.g. supplied on upload) rather than a library-wide constant.
 constexpr double kForecastHorizonWeeks = 26.0;
 
-void MarkFailed(drogon::orm::DbClientPtr db, const std::string& job_id, const std::string& reason) {
-    db->execSqlSync(
-        "UPDATE jobs SET status = 'failed', error_reason = $2, completed_at = now() "
-        "WHERE id = $1::uuid",
-        job_id, reason);
+// Best-effort: marking a job failed can itself fail -- e.g. job_id isn't even a syntactically
+// valid UUID (a malformed id pushed onto the queue makes the ::uuid cast throw), or the DB
+// connection is the very thing that broke. Either way, the failure is logged and swallowed
+// here: ProcessOneJob's contract is that it never throws, and a worker process that exits
+// over one bad job stops processing every other job too.
+void MarkFailedBestEffort(drogon::orm::DbClientPtr db, const std::string& job_id,
+                          const std::string& reason) noexcept {
+    try {
+        db->execSqlSync(
+            "UPDATE jobs SET status = 'failed', error_reason = $2, completed_at = now() "
+            "WHERE id = $1::uuid",
+            job_id, reason);
+    } catch (const std::exception& e) {
+        std::cerr << "worker: could not mark job '" << job_id << "' failed (" << e.what()
+                  << "); original failure: " << reason << "\n";
+    } catch (...) {
+        std::cerr << "worker: could not mark job '" << job_id
+                  << "' failed (unknown error); original failure: " << reason << "\n";
+    }
 }
+
+void ProcessOneJobUnguarded(const std::string& job_id, drogon::orm::DbClientPtr db,
+                            UploadStorage& storage);
 
 }  // namespace
 
@@ -115,6 +135,26 @@ void ScoreCohortAndWriteResults(const std::string& job_id, drogon::orm::DbClient
         }
 
         double clv_point = (scored && have_clv) ? nu[i] * expected_purchases_value : 0.0;
+        // No conformal interval is fitted in this phase: lower/upper collapse to the point.
+        double clv_lower = clv_point;
+        double clv_upper = clv_point;
+
+        // posterior_mean_nu returns NaN when the fitted Gamma-Gamma posterior shape is <= 1
+        // (q <= 1 for an x==0 customer, p*x+q <= 1 for an x>0 one -- the Inverse-Gamma mean
+        // is undefined there, see clv.hpp). NaN must never reach forecast_results: Postgres
+        // accepts it into DOUBLE PRECISION, after which it serializes as JSON null (breaking
+        // clients reading a number) and as the literal "nan" in the CSV export. Write 0.0
+        // placeholders instead and flag the row 'clv_unavailable' -- but only when it would
+        // otherwise be 'ok': 'insufficient_history'/'forecast_unavailable' are more specific
+        // reasons (and already tell the client not to trust the row), so they are kept.
+        if (!std::isfinite(clv_point) || !std::isfinite(clv_lower) || !std::isfinite(clv_upper)) {
+            clv_point = 0.0;
+            clv_lower = 0.0;
+            clv_upper = 0.0;
+            if (data_quality == "ok") {
+                data_quality = "clv_unavailable";
+            }
+        }
 
         nlohmann::json model_params{{"r", params.r}, {"alpha", params.alpha},
                                      {"s", params.s}, {"beta", params.beta}};
@@ -128,11 +168,36 @@ void ScoreCohortAndWriteResults(const std::string& job_id, drogon::orm::DbClient
             "VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::jsonb, $9) "
             "ON CONFLICT (job_id, customer_id) DO NOTHING",
             job_id, customer_id, expected_purchases_value, p_alive_value, clv_point,
-            clv_point, clv_point, model_params.dump(), data_quality);
+            clv_lower, clv_upper, model_params.dump(), data_quality);
     }
 }
 
 void ProcessOneJob(const std::string& job_id, drogon::orm::DbClientPtr db, UploadStorage& storage) {
+    if (!db) {
+        std::cerr << "worker: no database client, cannot process job '" << job_id << "'\n";
+        return;
+    }
+    // EVERY step -- the 'running' status update, the upload_path lookup, ingestion, model
+    // load/inference, forecasting, CLV and the Postgres writes -- runs inside this one
+    // try/catch. Before this, the status update and the SELECT ran outside any try, so a
+    // malformed job id on the queue (::uuid cast error) escaped ProcessOneJob and killed the
+    // whole worker process. Per spec Sec6 an unexpected exception marks the job failed with a
+    // reason (best-effort -- see MarkFailedBestEffort), never crashes the worker.
+    try {
+        ProcessOneJobUnguarded(job_id, db, storage);
+    } catch (const std::exception& e) {
+        std::cerr << "worker: job '" << job_id << "' failed: " << e.what() << "\n";
+        MarkFailedBestEffort(db, job_id, e.what());
+    } catch (...) {
+        std::cerr << "worker: job '" << job_id << "' failed with a non-standard exception\n";
+        MarkFailedBestEffort(db, job_id, "internal error");
+    }
+}
+
+namespace {
+
+void ProcessOneJobUnguarded(const std::string& job_id, drogon::orm::DbClientPtr db,
+                            UploadStorage& storage) {
     db->execSqlSync("UPDATE jobs SET status = 'running' WHERE id = $1::uuid", job_id);
 
     auto job_rows = db->execSqlSync("SELECT upload_path FROM jobs WHERE id = $1::uuid", job_id);
@@ -143,31 +208,26 @@ void ProcessOneJob(const std::string& job_id, drogon::orm::DbClientPtr db, Uploa
     try {
         cohort = ingest_csv(csv_path);
     } catch (const IngestError& e) {
-        MarkFailed(db, job_id, e.what());
+        // A bad upload is an expected, user-facing failure -- recorded with ingest's own
+        // message. Anything else thrown from here on propagates to ProcessOneJob's catch-all.
+        MarkFailedBestEffort(db, job_id, e.what());
         return;
     }
 
-    // Everything past ingestion (model load/inference, the closed-form forecast, Gamma-Gamma
-    // CLV, and the Postgres writes) is wrapped in one try/catch: none of these failure modes
-    // are expected in normal operation, but per spec §6 an unexpected exception here must
-    // mark the job failed with a user-facing reason, never crash the worker process or
-    // propagate a raw stack trace to the caller/process.
-    try {
-        // The models directory carries the committed ONNX/scaler artifacts (Phase 1) -- reuse
-        // the same PROJECT_MODELS_DIR convention the demo/tests already use.
-        AmortizedModel model(std::string(PROJECT_MODELS_DIR) + "/amortizer_mlp.onnx",
-                              std::string(PROJECT_MODELS_DIR) + "/amortizer_scalers.json");
-        auto features = cohort_features(cohort.x, cohort.t_x, cohort.T_cal);
-        auto amortized = model.predict(features);
-        const ParetoNbdParams params{amortized.r, amortized.alpha, amortized.s, amortized.beta};
+    // The models directory carries the committed ONNX/scaler artifacts (Phase 1) -- reuse
+    // the same PROJECT_MODELS_DIR convention the demo/tests already use.
+    AmortizedModel model(std::string(PROJECT_MODELS_DIR) + "/amortizer_mlp.onnx",
+                          std::string(PROJECT_MODELS_DIR) + "/amortizer_scalers.json");
+    auto features = cohort_features(cohort.x, cohort.t_x, cohort.T_cal);
+    auto amortized = model.predict(features);
+    const ParetoNbdParams params{amortized.r, amortized.alpha, amortized.s, amortized.beta};
 
-        ScoreCohortAndWriteResults(job_id, db, cohort, params);
+    ScoreCohortAndWriteResults(job_id, db, cohort, params);
 
-        db->execSqlSync(
-            "UPDATE jobs SET status = 'done', completed_at = now() WHERE id = $1::uuid", job_id);
-    } catch (const std::exception& e) {
-        MarkFailed(db, job_id, e.what());
-    }
+    db->execSqlSync(
+        "UPDATE jobs SET status = 'done', completed_at = now() WHERE id = $1::uuid", job_id);
 }
+
+}  // namespace
 
 }  // namespace pareto_nbd

@@ -1,8 +1,9 @@
 #include "pareto_nbd/api_routes.hpp"
 
+#include <charconv>
 #include <regex>
-#include <sstream>
 #include <string>
+#include <string_view>
 
 #include "pareto_nbd/ingest.hpp"
 
@@ -35,11 +36,61 @@ bool IsValidUuidFormat(const std::string& id) {
     return std::regex_match(id, kUuidRegex);
 }
 
+// Escapes one free-text CSV field (customer_id, data_quality) for /jobs/{id}/export.csv.
+//
+// 1. Formula-injection guard (OWASP "CSV Injection" mitigation): a field starting with '=',
+//    '+', '-', '@', TAB or CR is interpreted as a formula by Excel/LibreOffice/Sheets when the
+//    export is opened, so it is prefixed with a single quote, which those tools treat as
+//    "this cell is text". Trade-off: a legitimate customer id like "-123" exports as "'-123"
+//    -- the standard, accepted cost of this mitigation. Applied ONLY to free-text fields,
+//    never to the numeric columns (a negative number there is data, not a formula, and they
+//    are produced by FormatDouble below, never from user input).
+// 2. RFC 4180 quoting: a field containing a comma, double quote, CR or LF is wrapped in
+//    double quotes with each embedded double quote doubled.
+std::string EscapeCsvField(std::string_view field) {
+    std::string out;
+    out.reserve(field.size() + 3);
+    if (!field.empty() && (field[0] == '=' || field[0] == '+' || field[0] == '-' ||
+                           field[0] == '@' || field[0] == '\t' || field[0] == '\r')) {
+        out.push_back('\'');
+    }
+    out.append(field);
+    if (out.find_first_of(",\"\r\n") == std::string::npos) {
+        return out;
+    }
+    std::string quoted;
+    quoted.reserve(out.size() + 2);
+    quoted.push_back('"');
+    for (char c : out) {
+        if (c == '"') quoted.push_back('"');
+        quoted.push_back(c);
+    }
+    quoted.push_back('"');
+    return quoted;
+}
+
+// Formats a double for the CSV export with std::to_chars's shortest round-trip
+// representation (C++17 <charconv>, supported by this project's MSVC/C++20 toolchain): the
+// shortest decimal string that parses back to the exact same double. Chosen over
+// std::setprecision(17), which is also round-trip-safe but prints noise digits for values
+// that aren't exactly representable (1477186.37 -> "1477186.3700000001"), and over the
+// default ostream precision (6 significant digits), which silently truncated real CLV
+// values (1477186.37 -> "1.47719e+06").
+std::string FormatDouble(double value) {
+    char buf[64];
+    auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), value);
+    if (ec != std::errc()) {
+        return "0";  // unreachable for a 64-byte buffer; never emit garbage if it ever is
+    }
+    return std::string(buf, ptr);
+}
+
 }  // namespace
 
 void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
                         drogon::orm::DbClientPtr db,
-                        drogon::nosql::RedisClientPtr redis) {
+                        drogon::nosql::RedisClientPtr redis,
+                        const std::string& queue_key) {
     drogon::app().registerHandler(
         "/healthz",
         [](const drogon::HttpRequestPtr&,
@@ -68,7 +119,7 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
     // synchronous in the request path matters more than saving one parse pass.
     drogon::app().registerHandler(
         "/uploads",
-        [storage, db, redis](
+        [storage, db, redis, queue_key](
             const drogon::HttpRequestPtr& req,
             std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
             std::string body(req->getBody());
@@ -97,7 +148,23 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
                 pareto_nbd::kDefaultBusinessId, key);
             std::string job_id = rows[0]["id"].as<std::string>();
 
-            pareto_nbd::EnqueueJob(redis, job_id);
+            // If the push to Redis fails, no worker will ever see this job: returning 200 with
+            // a job_id here would hand the client an id that stays 'queued' forever. Instead
+            // mark the already-inserted row failed (so GET /jobs/{id} tells the truth if the
+            // id is ever looked up) and tell the client to retry with a 503.
+            if (!pareto_nbd::EnqueueJob(redis, job_id, queue_key)) {
+                db->execSqlSync(
+                    "UPDATE jobs SET status = 'failed', error_reason = $2, completed_at = now() "
+                    "WHERE id = $1::uuid",
+                    job_id,
+                    std::string("could not enqueue job for processing (queue unavailable)"));
+                // job_id is still returned so the client can reference the failed job
+                // (GET /jobs/{id} reports it as 'failed' with this reason).
+                callback(JsonResponse(
+                    {{"error", "job queue unavailable, please retry"}, {"job_id", job_id}},
+                    drogon::k503ServiceUnavailable));
+                return;
+            }
 
             callback(JsonResponse({{"job_id", job_id}}, drogon::k200OK));
         },
@@ -186,7 +253,7 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
             // testing this route with a real page_size.
             auto rows = db->execSqlSync(
                 "SELECT c.external_customer_id, fr.expected_purchases, fr.p_alive, "
-                "fr.clv_point, fr.clv_lower, fr.clv_upper "
+                "fr.clv_point, fr.clv_lower, fr.clv_upper, fr.data_quality "
                 "FROM forecast_results fr JOIN customers c ON c.id = fr.customer_id "
                 "WHERE fr.job_id = $1::uuid ORDER BY c.external_customer_id "
                 "LIMIT $2::int OFFSET $3::int",
@@ -201,6 +268,12 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
                     {"clv_point", row["clv_point"].as<double>()},
                     {"clv_lower", row["clv_lower"].as<double>()},
                     {"clv_upper", row["clv_upper"].as<double>()},
+                    // Per spec Sec6, every row carries its data-quality flag: 'ok',
+                    // 'insufficient_history', 'forecast_unavailable' (numbers are 0.0
+                    // placeholders) or 'clv_unavailable' (clv_* are 0.0 placeholders).
+                    // Without it a placeholder row is indistinguishable from a real
+                    // p_alive=0 churn prediction.
+                    {"data_quality", row["data_quality"].as<std::string>()},
                 });
             }
             nlohmann::json body{{"job_id", id}, {"page", page}, {"page_size", page_size},
@@ -211,9 +284,14 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
 
     // GET /jobs/{id}/export.csv: the full (unpaginated) forecast_results for a job as CSV.
     // Same id-into-::uuid-cast pattern as /jobs/{id} and /jobs/{id}/results above, so the same
-    // format check runs first. Unlike /jobs/{id}/results, this route doesn't gate on job
-    // status -- an unknown or not-yet-done job id simply yields zero rows (header only), which
-    // is an acceptable/self-describing CSV rather than requiring a second error path.
+    // format check runs first, and the same job-status gate as /jobs/{id}/results: an unknown
+    // or not-yet-'done' job is a 404, never a 200 with a header-only (or, for a job that
+    // failed partway through writing forecast_results, a silently partial) CSV.
+    //
+    // Columns: customer_id, the five numeric forecast columns, and data_quality (spec Sec6's
+    // per-row flag -- see /jobs/{id}/results). Free-text fields go through EscapeCsvField
+    // (RFC 4180 quoting + formula-injection guard); numeric fields through FormatDouble
+    // (shortest round-trip, no precision loss).
     drogon::app().registerHandler(
         "/jobs/{id}/export.csv",
         [db](const drogon::HttpRequestPtr&,
@@ -225,22 +303,33 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
                 return;
             }
 
+            auto job_rows = db->execSqlSync("SELECT status FROM jobs WHERE id = $1::uuid", id);
+            if (job_rows.empty() || job_rows[0]["status"].as<std::string>() != "done") {
+                callback(
+                    JsonResponse({{"error", "job not found or not done"}}, drogon::k404NotFound));
+                return;
+            }
+
             auto rows = db->execSqlSync(
                 "SELECT c.external_customer_id, fr.expected_purchases, fr.p_alive, "
-                "fr.clv_point, fr.clv_lower, fr.clv_upper "
+                "fr.clv_point, fr.clv_lower, fr.clv_upper, fr.data_quality "
                 "FROM forecast_results fr JOIN customers c ON c.id = fr.customer_id "
                 "WHERE fr.job_id = $1::uuid ORDER BY c.external_customer_id",
                 id);
 
-            std::ostringstream csv;
-            csv << "customer_id,expected_purchases,p_alive,clv_point,clv_lower,clv_upper\n";
+            std::string csv =
+                "customer_id,expected_purchases,p_alive,clv_point,clv_lower,clv_upper,"
+                "data_quality\n";
             for (const auto& row : rows) {
-                csv << row["external_customer_id"].as<std::string>() << ","
-                    << row["expected_purchases"].as<double>() << ","
-                    << row["p_alive"].as<double>() << ","
-                    << row["clv_point"].as<double>() << ","
-                    << row["clv_lower"].as<double>() << ","
-                    << row["clv_upper"].as<double>() << "\n";
+                csv += EscapeCsvField(row["external_customer_id"].as<std::string>());
+                for (const char* col :
+                     {"expected_purchases", "p_alive", "clv_point", "clv_lower", "clv_upper"}) {
+                    csv += ',';
+                    csv += FormatDouble(row[col].as<double>());
+                }
+                csv += ',';
+                csv += EscapeCsvField(row["data_quality"].as<std::string>());
+                csv += '\n';
             }
 
             // Drogon's drogon::ContentType enum (CT_*) has no built-in CSV entry -- the closest
@@ -252,11 +341,11 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
             // ...) would just add a SECOND, duplicate content-type header rather than replacing
             // the default -- confirmed by reading HttpResponseImpl.cc's makeHeaderString/
             // setContentTypeString. setContentTypeString updates that same contentTypeString_
-            // field directly, so only one content-type header is ever emitted.
+            // field directly, so only one content-type header is ever emitted. (The response
+            // status already defaults to 200.)
             auto resp = drogon::HttpResponse::newHttpResponse();
-            resp->setStatusCode(drogon::k200OK);
             resp->setContentTypeString("text/csv");
-            resp->setBody(csv.str());
+            resp->setBody(std::move(csv));
             callback(resp);
         },
         {drogon::Get});

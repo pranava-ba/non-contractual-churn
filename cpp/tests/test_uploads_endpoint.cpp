@@ -71,7 +71,97 @@ TEST_CASE("POST /uploads accepts a valid CSV and returns a job id", "[api][uploa
 
     // ...and the same id was actually pushed onto the Redis queue (not just that
     // EnqueueJob didn't throw).
-    auto dequeued = pareto_nbd::DequeueJob(redis, 2);
+    // The shared fixture registers /uploads against kTestJobQueueKey (never the production
+    // queue a live worker consumes), so that is where this job id must have landed.
+    auto dequeued = pareto_nbd::DequeueJob(redis, 2, pareto_nbd::kTestJobQueueKey);
     REQUIRE(dequeued.has_value());
     REQUIRE(*dequeued == job_id);
+}
+
+TEST_CASE("POST /uploads accepts a CSV larger than Drogon's 1 MB default body limit",
+          "[api][uploads]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    auto redis = pareto_nbd::ConnectRedis(pareto_nbd::kTestRedisUri);
+    if (!db || !redis) { SKIP("Postgres/Redis not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+
+    // 60k rows (~1.9 MB) -- the size the final review saw rejected with 413 before the body
+    // limit was raised (api_main.cpp / test_server_fixture.cpp's setClientMaxBodySize).
+    std::string csv = "customer_id,transaction_date,amount\n";
+    for (int i = 0; i < 60000; ++i) {
+        csv += "cust-" + std::to_string(i % 20000) + ",2024-0" + std::to_string(1 + i % 9) +
+               "-1" + std::to_string(i % 10) + ",12.50\n";
+    }
+    REQUIRE(csv.size() > 1024 * 1024);
+
+    auto client = drogon::HttpClient::newHttpClient(pareto_nbd::test::TestServerBaseUrl());
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setMethod(drogon::Post);
+    req->setPath("/uploads");
+    req->setBody(csv);
+    auto [result, response] = client->sendRequest(req, 30.0);
+    REQUIRE(result == drogon::ReqResult::Ok);
+    REQUIRE(response->getStatusCode() == drogon::k200OK);
+    std::string job_id = nlohmann::json::parse(response->getBody())["job_id"].get<std::string>();
+
+    // Drain this job from the test queue so it can't be mistaken for a later test's job.
+    auto dequeued = pareto_nbd::DequeueJob(redis, 2, pareto_nbd::kTestJobQueueKey);
+    REQUIRE(dequeued.has_value());
+    REQUIRE(*dequeued == job_id);
+}
+
+namespace {
+
+// Deletes the test queue key on construction and destruction, so a test that deliberately
+// breaks it (below) can never leave it broken for later tests or later runs.
+struct TestQueueKeyReset {
+    explicit TestQueueKeyReset(drogon::nosql::RedisClientPtr r) : redis(std::move(r)) { Del(); }
+    ~TestQueueKeyReset() {
+        try {
+            Del();
+        } catch (...) {
+        }
+    }
+    void Del() {
+        redis->execCommandSync<std::string>(
+            [](const drogon::nosql::RedisResult& r) { return r.getStringForDisplaying(); },
+            "DEL %s", pareto_nbd::kTestJobQueueKey.c_str());
+    }
+    drogon::nosql::RedisClientPtr redis;
+};
+
+}  // namespace
+
+TEST_CASE("POST /uploads returns 503 and marks the job failed when enqueueing fails",
+          "[api][uploads]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    auto redis = pareto_nbd::ConnectRedis(pareto_nbd::kTestRedisUri);
+    if (!db || !redis) { SKIP("Postgres/Redis not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+
+    std::string job_id;
+    {
+        TestQueueKeyReset reset(redis);
+        // Turn the fixture's queue key into a plain string: the handler's RPUSH then gets a
+        // real WRONGTYPE error reply from Redis -- the same failure path a dropped Redis
+        // connection takes -- without having to stop the shared Redis server.
+        redis->execCommandSync<std::string>(
+            [](const drogon::nosql::RedisResult& r) { return r.getStringForDisplaying(); },
+            "SET %s %s", pareto_nbd::kTestJobQueueKey.c_str(), "not-a-list");
+
+        auto response = PostUpload(
+            "customer_id,transaction_date,amount\nA,2024-01-01,10.0\nA,2024-01-08,5.0\n");
+        REQUIRE(response->getStatusCode() == drogon::k503ServiceUnavailable);
+        auto body = nlohmann::json::parse(response->getBody());
+        REQUIRE(body.contains("error"));
+        REQUIRE(body.contains("job_id"));
+        job_id = body["job_id"].get<std::string>();
+    }
+
+    // The already-inserted jobs row is marked failed with a reason, not left 'queued' forever.
+    auto rows =
+        db->execSqlSync("SELECT status, error_reason FROM jobs WHERE id = $1::uuid", job_id);
+    REQUIRE(rows.size() == 1);
+    REQUIRE(rows[0]["status"].as<std::string>() == "failed");
+    REQUIRE_FALSE(rows[0]["error_reason"].isNull());
 }

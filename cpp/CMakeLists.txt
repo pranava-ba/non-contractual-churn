@@ -71,6 +71,11 @@ target_compile_definitions(main PRIVATE
 
 add_executable(api_server src/api_main.cpp)
 target_link_libraries(api_server PRIVATE amortized_inference Drogon::Drogon)
+# api_server applies db/schema.sql at startup (idempotent); this is the default location,
+# overridable at runtime via the PARETO_NBD_SCHEMA_PATH environment variable (api_main.cpp).
+target_compile_definitions(api_server PRIVATE
+    PARETO_NBD_DEFAULT_SCHEMA_PATH="${CMAKE_SOURCE_DIR}/../db/schema.sql"
+)
 
 add_executable(worker src/worker_main.cpp)
 target_link_libraries(worker PRIVATE amortized_inference Drogon::Drogon)
