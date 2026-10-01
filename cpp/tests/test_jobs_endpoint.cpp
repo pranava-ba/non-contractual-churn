@@ -51,3 +51,11 @@ TEST_CASE("GET /jobs/{id} returns status for a known job, 404 for an unknown one
     auto response2 = GetJob("00000000-0000-0000-0000-000000000099");
     REQUIRE(response2->getStatusCode() == drogon::k404NotFound);
 }
+
+TEST_CASE("GET /jobs/{id} returns 400 for a malformed id, never touching the database",
+          "[api][jobs]") {
+    auto response = GetJob("not-a-valid-uuid");
+    REQUIRE(response->getStatusCode() == drogon::k400BadRequest);
+    auto body = nlohmann::json::parse(response->getBody());
+    REQUIRE(body["error"] == "invalid job id format");
+}

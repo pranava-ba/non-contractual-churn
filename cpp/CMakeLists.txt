@@ -92,6 +92,7 @@ add_executable(unit_tests
     tests/test_queue.cpp
     tests/test_uploads_endpoint.cpp
     tests/test_jobs_endpoint.cpp
+    tests/test_results_endpoint.cpp
     tests/test_forecast.cpp
     tests/test_worker.cpp
 )
