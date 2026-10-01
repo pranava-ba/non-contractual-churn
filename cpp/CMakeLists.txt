@@ -78,6 +78,7 @@ add_executable(unit_tests
     tests/test_db.cpp
     tests/test_storage.cpp
     tests/test_queue.cpp
+    tests/test_uploads_endpoint.cpp
 )
 target_link_libraries(unit_tests PRIVATE amortized_inference Catch2::Catch2WithMain Drogon::Drogon)
 target_compile_definitions(unit_tests PRIVATE
