@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { api, ApiError } from '$lib/api';
   import { pollJob } from '$lib/poller';
+  import Dashboard from '$lib/components/Dashboard.svelte';
   import type { JobInfo } from '$lib/types';
 
   const id = page.params.id as string;

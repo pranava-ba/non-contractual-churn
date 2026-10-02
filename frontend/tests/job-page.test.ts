@@ -5,7 +5,13 @@ const getJob = vi.fn();
 vi.mock('$app/state', () => ({ page: { params: { id: 'job-1' } } }));
 vi.mock('$lib/api', async (orig) => {
   const actual = await orig<typeof import('../src/lib/api')>();
-  return { ...actual, api: { getJob: (...a: unknown[]) => getJob(...a) } };
+  return {
+    ...actual,
+    api: {
+      getJob: (...a: unknown[]) => getJob(...a),
+      getSummary: () => new Promise(() => {}) // keep the dashboard in its loading state
+    }
+  };
 });
 
 import { ApiError } from '../src/lib/api';
