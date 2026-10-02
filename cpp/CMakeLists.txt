@@ -48,6 +48,7 @@ add_library(amortized_inference
     src/forecast.cpp
     src/fit_policy.cpp
     src/subprocess.cpp
+    src/mcmc_fit.cpp
     src/worker.cpp
     src/api_routes.cpp
 )
@@ -63,6 +64,7 @@ target_link_libraries(amortized_inference PUBLIC
 # as the main/unit_tests executables below.
 target_compile_definitions(amortized_inference PRIVATE
     PROJECT_MODELS_DIR="${CMAKE_SOURCE_DIR}/../models"
+    PROJECT_ROOT_DIR="${CMAKE_SOURCE_DIR}/.."
 )
 
 add_executable(main src/main.cpp)
@@ -105,6 +107,7 @@ add_executable(unit_tests
     tests/test_forecast.cpp
     tests/test_fit_policy.cpp
     tests/test_subprocess.cpp
+    tests/test_mcmc_fit.cpp
     tests/test_worker.cpp
     tests/test_integration_upload_to_results.cpp
 )

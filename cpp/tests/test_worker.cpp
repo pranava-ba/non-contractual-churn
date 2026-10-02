@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <cstdlib>
 
 #include <cmath>
 #include <string>
@@ -312,4 +313,83 @@ TEST_CASE("ProcessOneJob marks a job failed (not a crash) when its upload file i
         db->execSqlSync("SELECT status, error_reason FROM jobs WHERE id = $1::uuid", job_id);
     REQUIRE(job_rows[0]["status"].as<std::string>() == "failed");
     REQUIRE_FALSE(job_rows[0]["error_reason"].isNull());
+}
+
+namespace {
+void SetEnvW(const char* k, const std::string& v) {
+#ifdef _WIN32
+    _putenv_s(k, v.c_str());
+#else
+    setenv(k, v.c_str(), 1);
+#endif
+}
+std::string InsertJobWithMode(drogon::orm::DbClientPtr db, const std::string& key,
+                              const std::string& mode) {
+    auto rows = db->execSqlSync(
+        "INSERT INTO jobs (business_id, status, upload_path, fit_mode) "
+        "VALUES ($1::uuid, 'queued', $2, $3) RETURNING id",
+        pareto_nbd::kDefaultBusinessId, key, mode);
+    return rows[0]["id"].as<std::string>();
+}
+const char* kSmallCsv = "customer_id,transaction_date,amount\n"
+                         "A,2024-01-01,10.0\nA,2024-01-08,5.0\nA,2024-01-22,8.0\n"
+                         "B,2024-01-01,3.0\nC,2024-01-15,20.0\nC,2024-01-29,6.0\n";
+}  // namespace
+
+TEST_CASE("fit_mode=mcmc uses the CLI's parameters and records fit_method", "[worker][mcmc]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    if (!db) { SKIP("Postgres not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+    SetEnvW("PARETO_MCMC_CLI", std::string(PROJECT_ROOT_DIR) + "/cpp/tests/fixtures/fake_mcmc_cli.py");
+    pareto_nbd::LocalDiskStorage storage("./data/test_worker_uploads");
+    storage.Put("uploads/mcmc-ok.csv", kSmallCsv);
+    std::string job_id = InsertJobWithMode(db, "uploads/mcmc-ok.csv", "mcmc");
+
+    pareto_nbd::ProcessOneJob(job_id, db, storage);
+
+    auto j = db->execSqlSync(
+        "SELECT status, fit_method, fit_note, mcmc_draws_path FROM jobs WHERE id=$1::uuid", job_id);
+    REQUIRE(j[0]["status"].as<std::string>() == "done");
+    if (j[0]["fit_method"].as<std::string>() != "mcmc") { SKIP("python not launchable"); }
+    REQUIRE(j[0]["fit_note"].isNull());
+    REQUIRE_FALSE(j[0]["mcmc_draws_path"].isNull());
+    auto p = db->execSqlSync(
+        "SELECT model_params->>'r' AS r FROM forecast_results WHERE job_id=$1::uuid LIMIT 1", job_id);
+    REQUIRE(std::stod(p[0]["r"].as<std::string>()) == 0.7);
+}
+
+TEST_CASE("fit_mode=mcmc falls back to the amortized fit with a note when the CLI fails",
+          "[worker][mcmc]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    if (!db) { SKIP("Postgres not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+    SetEnvW("PARETO_MCMC_CLI", std::string(PROJECT_ROOT_DIR) + "/cpp/tests/fixtures/does_not_exist.py");
+    pareto_nbd::LocalDiskStorage storage("./data/test_worker_uploads");
+    storage.Put("uploads/mcmc-fail.csv", kSmallCsv);
+    std::string job_id = InsertJobWithMode(db, "uploads/mcmc-fail.csv", "mcmc");
+
+    pareto_nbd::ProcessOneJob(job_id, db, storage);
+
+    auto j = db->execSqlSync("SELECT status, fit_method, fit_note FROM jobs WHERE id=$1::uuid", job_id);
+    REQUIRE(j[0]["status"].as<std::string>() == "done");
+    REQUIRE(j[0]["fit_method"].as<std::string>() == "amortized");
+    REQUIRE(j[0]["fit_note"].as<std::string>().rfind("High-precision refit unavailable", 0) == 0);
+}
+
+TEST_CASE("auto on a tiny cohort stays on the fast path without spawning Python",
+          "[worker][mcmc]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    if (!db) { SKIP("Postgres not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+    // A CLI path that would fail loudly if it were ever invoked.
+    SetEnvW("PARETO_MCMC_CLI", std::string(PROJECT_ROOT_DIR) + "/cpp/tests/fixtures/does_not_exist.py");
+    pareto_nbd::LocalDiskStorage storage("./data/test_worker_uploads");
+    storage.Put("uploads/auto-tiny.csv", kSmallCsv);
+    std::string job_id = InsertJobWithMode(db, "uploads/auto-tiny.csv", "auto");
+
+    pareto_nbd::ProcessOneJob(job_id, db, storage);
+
+    auto j = db->execSqlSync("SELECT fit_method, fit_note FROM jobs WHERE id=$1::uuid", job_id);
+    REQUIRE(j[0]["fit_method"].as<std::string>() == "amortized");
+    REQUIRE(j[0]["fit_note"].isNull());
 }

@@ -2,6 +2,8 @@
 
 #include "pareto_nbd/amortized_model.hpp"
 #include "pareto_nbd/clv.hpp"
+#include "pareto_nbd/fit_policy.hpp"
+#include "pareto_nbd/mcmc_fit.hpp"
 #include "pareto_nbd/cohort_features.hpp"
 #include "pareto_nbd/db.hpp"
 #include "pareto_nbd/forecast.hpp"
@@ -200,9 +202,12 @@ void ProcessOneJobUnguarded(const std::string& job_id, drogon::orm::DbClientPtr 
                             UploadStorage& storage) {
     db->execSqlSync("UPDATE jobs SET status = 'running' WHERE id = $1::uuid", job_id);
 
-    auto job_rows = db->execSqlSync("SELECT upload_path FROM jobs WHERE id = $1::uuid", job_id);
+    auto job_rows =
+        db->execSqlSync("SELECT upload_path, fit_mode FROM jobs WHERE id = $1::uuid", job_id);
     if (job_rows.empty()) { return; }  // job vanished; nothing sensible to do
     std::string csv_path = storage.GetPath(job_rows[0]["upload_path"].as<std::string>());
+    const FitMode mode =
+        ParseFitMode(job_rows[0]["fit_mode"].as<std::string>()).value_or(FitMode::Auto);
 
     CustomerFeatures cohort;
     try {
@@ -214,18 +219,42 @@ void ProcessOneJobUnguarded(const std::string& job_id, drogon::orm::DbClientPtr 
         return;
     }
 
-    // The models directory carries the committed ONNX/scaler artifacts (Phase 1) -- reuse
-    // the same PROJECT_MODELS_DIR convention the demo/tests already use.
-    AmortizedModel model(std::string(PROJECT_MODELS_DIR) + "/amortizer_mlp.onnx",
-                          std::string(PROJECT_MODELS_DIR) + "/amortizer_scalers.json");
-    auto features = cohort_features(cohort.x, cohort.t_x, cohort.T_cal);
-    auto amortized = model.predict(features);
-    const ParetoNbdParams params{amortized.r, amortized.alpha, amortized.s, amortized.beta};
+    FitDecision decision = ChooseFitMethod(mode, cohort.x.size());
+    std::string fit_method = "amortized";
+    std::string fit_note = decision.note;
+    std::string draws_key;
+    ParetoNbdParams params{};
+    bool have_params = false;
+
+    if (decision.method == FitMethod::Mcmc) {
+        // Optional high-precision path (spec phase 6). Any failure degrades to the amortized
+        // fit with a user-facing note -- MCMC must never fail a job.
+        McmcFitResult mcmc = RunMcmcFit(job_id, cohort, storage);
+        if (mcmc.ok) {
+            params = mcmc.params;
+            have_params = true;
+            fit_method = "mcmc";
+            draws_key = mcmc.draws_key;
+        } else {
+            fit_note = mcmc.note;
+        }
+    }
+    if (!have_params) {
+        // The models directory carries the committed ONNX/scaler artifacts (Phase 1) -- reuse
+        // the same PROJECT_MODELS_DIR convention the demo/tests already use.
+        AmortizedModel model(std::string(PROJECT_MODELS_DIR) + "/amortizer_mlp.onnx",
+                              std::string(PROJECT_MODELS_DIR) + "/amortizer_scalers.json");
+        auto features = cohort_features(cohort.x, cohort.t_x, cohort.T_cal);
+        auto amortized = model.predict(features);
+        params = ParetoNbdParams{amortized.r, amortized.alpha, amortized.s, amortized.beta};
+    }
 
     ScoreCohortAndWriteResults(job_id, db, cohort, params);
 
     db->execSqlSync(
-        "UPDATE jobs SET status = 'done', completed_at = now() WHERE id = $1::uuid", job_id);
+        "UPDATE jobs SET status = 'done', completed_at = now(), fit_method = $2, "
+        "fit_note = NULLIF($3, ''), mcmc_draws_path = NULLIF($4, '') WHERE id = $1::uuid",
+        job_id, fit_method, fit_note, draws_key);
 }
 
 }  // namespace
