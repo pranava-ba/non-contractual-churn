@@ -19,20 +19,45 @@ async function get(path) {
   return res;
 }
 
+async function waitDone(job_id, seconds = 60) {
+  let job = { status: 'queued' };
+  for (let i = 0; i < seconds && job.status !== 'done' && job.status !== 'failed'; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    job = await (await get(`/api/jobs/${job_id}`)).json();
+  }
+  if (job.status !== 'done') fail(`job ended as '${job.status}' (is the worker running?)`);
+  return job;
+}
+
+async function upload(csv, mode) {
+  const q = mode ? `?fit_mode=${mode}` : '';
+  const up = await fetch(`${base}/api/uploads${q}`, { method: 'POST', headers: { 'content-type': 'text/csv' }, body: csv });
+  if (!up.ok) fail(`upload -> HTTP ${up.status} ${await up.text()}`);
+  return (await up.json()).job_id;
+}
+
 async function main() {
   const csv = await readFile(csvPath);
-  const up = await fetch(`${base}/api/uploads`, { method: 'POST', headers: { 'content-type': 'text/csv' }, body: csv });
-  if (!up.ok) fail(`upload -> HTTP ${up.status} ${await up.text()}`);
-  const { job_id } = await up.json();
-  ok(`uploaded, job ${job_id}`);
+  const job_id = await upload(csv, 'fast');
+  ok(`uploaded (fit_mode=fast), job ${job_id}`);
+  const fast = await waitDone(job_id);
+  if (fast.fit_method !== 'amortized') fail(`fast job used '${fast.fit_method}', expected amortized`);
+  ok('job done, fitted with the amortized estimator');
 
-  let status = 'queued';
-  for (let i = 0; i < 60 && status !== 'done' && status !== 'failed'; i++) {
-    await new Promise((r) => setTimeout(r, 1000));
-    status = (await (await get(`/api/jobs/${job_id}`)).json()).status;
-  }
-  if (status !== 'done') fail(`job ended as '${status}' (is the worker running?)`);
-  ok('job done');
+  // High-precision refit of the same upload (MCMC subprocess); allow a few minutes.
+  const t0 = Date.now();
+  const refit = await fetch(`${base}/api/jobs/${job_id}/refit`, { method: 'POST' });
+  if (!refit.ok) fail(`refit -> HTTP ${refit.status} ${await refit.text()}`);
+  const refit_id = (await refit.json()).job_id;
+  const mc = await waitDone(refit_id, 600);
+  if (mc.source_job_id !== job_id) fail(`refit source_job_id is ${mc.source_job_id}`);
+  if (mc.fit_method !== 'mcmc') fail(`refit used '${mc.fit_method}' (${mc.fit_note ?? 'no note'}), expected mcmc`);
+  ok(`refit done with MCMC in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+
+  // fit_mode=auto picks MCMC for a cohort inside the small-cohort window, else the fast path.
+  const auto_id = await upload(csv);
+  const auto = await waitDone(auto_id, 600);
+  ok(`auto upload used '${auto.fit_method}'`);
 
   const summary = await (await get(`/api/jobs/${job_id}/summary`)).json();
   if (!(summary.n_customers > 0)) fail('summary has no customers');
@@ -46,6 +71,10 @@ async function main() {
   const exp = await (await get(`/api/jobs/${job_id}/export.csv`)).text();
   if (!exp.startsWith('customer_id,expected_purchases,p_alive')) fail('export header is wrong');
   ok(`export: ${exp.trim().split('\n').length - 1} data rows`);
+
+  const badMode = await fetch(`${base}/api/uploads?fit_mode=bogus`, { method: 'POST', headers: { 'content-type': 'text/csv' }, body: csv });
+  if (badMode.status !== 400) fail(`bogus fit_mode should be 400, got ${badMode.status}`);
+  ok('unknown fit_mode rejected with 400');
 
   const bad = await fetch(`${base}/api/uploads`, { method: 'POST', headers: { 'content-type': 'text/csv' }, body: 'a,b\n1,2\n' });
   if (bad.status !== 400) fail(`bad upload should be 400, got ${bad.status}`);
