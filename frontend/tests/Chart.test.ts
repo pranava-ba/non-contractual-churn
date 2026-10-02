@@ -9,7 +9,7 @@ vi.mock('echarts/core', () => ({
   use: vi.fn()
 }));
 vi.mock('echarts/charts', () => ({ BarChart: {} }));
-vi.mock('echarts/components', () => ({ GridComponent: {}, TooltipComponent: {}, AriaComponent: {} }));
+vi.mock('echarts/components', () => ({ GridComponent: {}, TitleComponent: {}, TooltipComponent: {}, AriaComponent: {} }));
 vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
 
 import Chart from '../src/lib/components/Chart.svelte';

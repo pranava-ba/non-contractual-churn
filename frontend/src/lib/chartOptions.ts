@@ -2,6 +2,8 @@ import type { EChartsCoreOption } from 'echarts/core';
 import type { Histogram } from './types';
 
 export interface HistogramOptions {
+  /** Names the chart for screen readers: ECharts builds its aria description from the title. */
+  title: string;
   seriesName: string;
   xLabel: string;
   fmt: (n: number) => string;
@@ -13,6 +15,7 @@ export function histogramOption(h: Histogram, o: HistogramOptions): EChartsCoreO
   }
   const labels = h.counts.map((_, i) => `${o.fmt(h.edges[i])}–${o.fmt(h.edges[i + 1])}`);
   return {
+    title: { text: o.title, show: false },
     aria: { enabled: true },
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     grid: { left: 56, right: 16, top: 24, bottom: 56 },

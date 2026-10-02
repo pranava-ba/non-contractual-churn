@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getJob = vi.fn();
+const getSummary = vi.fn((..._args: unknown[]) => new Promise(() => {})); // keep the dashboard in its loading state
 vi.mock('$app/state', () => ({ page: { params: { id: 'job-1' } } }));
 vi.mock('$lib/api', async (orig) => {
   const actual = await orig<typeof import('../src/lib/api')>();
@@ -9,7 +10,7 @@ vi.mock('$lib/api', async (orig) => {
     ...actual,
     api: {
       getJob: (...a: unknown[]) => getJob(...a),
-      getSummary: () => new Promise(() => {}) // keep the dashboard in its loading state
+      getSummary: (...a: unknown[]) => getSummary(...a)
     }
   };
 });
@@ -29,6 +30,8 @@ describe('job page', () => {
     render(Page);
     expect(await screen.findByText(/running/i)).toBeInTheDocument();
     expect(await screen.findByTestId('job-done', {}, { timeout: 4000 })).toBeInTheDocument();
+    // the dashboard is mounted for a done job (its summary request is the proof)
+    expect(getSummary).toHaveBeenCalledWith('job-1');
   });
 
   it('shows the failure reason', async () => {

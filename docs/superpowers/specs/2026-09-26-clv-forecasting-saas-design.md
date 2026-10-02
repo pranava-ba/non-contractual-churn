@@ -50,7 +50,11 @@ job queue and job-status cache between the API and workers.
 - **Dashboard**: cohort-level charts (forecast distribution, PIT/calibration
   diagnostic, P(active) histogram) via **ECharts** (through a Svelte
   wrapper), plus a sortable/filterable per-customer table (expected
-  purchases, P(alive), CLV point + interval).
+  purchases, P(alive), CLV point + interval). *(The PIT/calibration
+  diagnostic is deferred: it needs a held-out future that production uploads
+  do not have. CLV intervals appear once the worker fits a conformal
+  interval; until then the table shows point CLV only. See
+  `docs/superpowers/plans/2026-10-02-sveltekit-frontend.md`.)*
 - **Export**: button triggers `GET /jobs/{id}/export.csv`.
 
 ### 4.2 API — Drogon (C++20)
@@ -281,6 +285,9 @@ assumed.
 4. Drogon API: upload → validate → enqueue → worker picks up → writes
    results to Postgres.
 5. SvelteKit frontend: upload flow, dashboard, export — wired to the API.
+   Implemented per `docs/superpowers/plans/2026-10-02-sveltekit-frontend.md`
+   (`frontend/`; adds `GET /jobs/{id}/summary` and sort/filter params on
+   `/results` to the API).
 6. (Stretch, non-blocking) High-precision MCMC path as an optional
    Python-subprocess call.
 

@@ -13,6 +13,11 @@ describe('format', () => {
     expect(formatNum(0.012345)).toBe('0.0123');
     expect(formatNum(0)).toBe('0');
   });
+  it('does not round large values to 3 significant digits (1,497.6 must not read as 1,500)', () => {
+    expect(formatNum(1497.6)).toBe('1,498');
+    expect(formatNum(123.456)).toBe('123');
+    expect(formatNum(-2500.4)).toBe('-2,500');
+  });
   it('has a label and help text for every data-quality value', () => {
     for (const q of ['ok', 'insufficient_history', 'forecast_unavailable', 'clv_unavailable'] as const) {
       expect(QUALITY_LABEL[q]).toBeTruthy();

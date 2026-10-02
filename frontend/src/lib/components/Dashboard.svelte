@@ -38,6 +38,7 @@
       <Chart
         label="Distribution of P(alive)"
         option={histogramOption(summary.histograms.p_alive, {
+          title: 'Distribution of P(alive)',
           seriesName: 'Customers',
           xLabel: 'P(alive)',
           fmt: formatPct
@@ -49,6 +50,7 @@
       <Chart
         label="Distribution of expected purchases"
         option={histogramOption(summary.histograms.expected_purchases, {
+          title: 'Distribution of expected purchases',
           seriesName: 'Customers',
           xLabel: 'Expected purchases',
           fmt: formatNum
@@ -61,6 +63,7 @@
         <Chart
           label="Distribution of customer lifetime value"
           option={histogramOption(summary.histograms.clv_point, {
+            title: 'Distribution of customer lifetime value',
             seriesName: 'Customers',
             xLabel: 'CLV',
             fmt: formatMoney

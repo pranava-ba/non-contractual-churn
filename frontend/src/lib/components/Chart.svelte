@@ -3,10 +3,10 @@
   import * as echarts from 'echarts/core';
   import type { EChartsCoreOption } from 'echarts/core';
   import { BarChart } from 'echarts/charts';
-  import { AriaComponent, GridComponent, TooltipComponent } from 'echarts/components';
+  import { AriaComponent, GridComponent, TitleComponent, TooltipComponent } from 'echarts/components';
   import { CanvasRenderer } from 'echarts/renderers';
 
-  echarts.use([BarChart, GridComponent, TooltipComponent, AriaComponent, CanvasRenderer]);
+  echarts.use([BarChart, GridComponent, TitleComponent, TooltipComponent, AriaComponent, CanvasRenderer]);
 
   let { option, label, height = '260px' }: { option: EChartsCoreOption; label: string; height?: string } = $props();
 

@@ -7,7 +7,9 @@ const sig3 = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 3 });
 export const formatInt = (n: number) => int.format(n);
 export const formatMoney = (n: number) => money.format(n);
 export const formatPct = (p: number) => `${(p * 100).toFixed(1)}%`;
-export const formatNum = (n: number) => sig3.format(n);
+// 3 significant digits suit small values (0.0123), but would turn 1,497.6 into 1,500 -- from 100
+// up, show whole numbers instead.
+export const formatNum = (n: number) => (Math.abs(n) >= 100 ? int.format(n) : sig3.format(n));
 
 export const QUALITY_LABEL: Record<DataQuality, string> = {
   ok: 'OK',

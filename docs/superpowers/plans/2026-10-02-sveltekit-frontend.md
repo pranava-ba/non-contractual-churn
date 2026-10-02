@@ -2821,3 +2821,20 @@ git commit -m "feat(frontend): live-stack smoke script, run docs, and spec statu
 **Type consistency:** `ResultsQuery` fields (`page,pageSize,sort,order,quality,q`) are defined in Task 4 and used identically in Tasks 4 (client), 10 (table, tests). `JobSummary.histograms.{p_alive,expected_purchases,clv_point}`, `quality_counts`, `has_clv_interval` match the Task 1 JSON exactly. `Histogram {edges,counts}` is consumed by `histogramOption` (Task 8). `api.getJob` is passed unbound in Task 7 — it is an arrow function from `createApi`, so this is safe. `exportUrl` is exported from `api.ts` (Task 4) and imported in Task 11.
 
 **Risks to watch during execution:** (1) Vite/Svelte-plugin/Vitest peer versions in Task 3; (2) `$app/state` (`page.params`) requires SvelteKit ≥ 2.12 — pinned `^2.15`; (3) the first C++ rebuild may be slow; (4) the Svelte 5 + jsdom + Testing Library combination can need `svelteTesting()` plugin ordering tweaks (already included) — if component tests report "mount is not available on the server", confirm `resolve.conditions` includes `browser`, which `svelteTesting()` sets.
+
+---
+
+## Execution notes (2026-10-02)
+
+Tasks 1–12 were implemented against this plan. Deviations and lessons, so the next reader does not rediscover them:
+
+- **Build commands (Tasks 1–2):** the C++ build tree is `cpp/build` (Ninja, single-config) — there is no `Release/` subdirectory, so run `cpp/build/unit_tests "[summary]"`. From a plain shell the MSVC environment is missing (`ctime` not found); run builds through `vcvars64.bat` (`call "…\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && cmake --build build --target unit_tests`).
+- **Rebuild the servers too:** `cmake --build build --target unit_tests` does **not** relink `api_server.exe` / `worker.exe`. A smoke run against stale binaries returns 404 for the new routes — build `--target api_server worker` before Task 12.
+- **`.gitignore` / `lib/`:** see Task 3 — `!frontend/src/lib/` is required.
+- **Vitest `beforeEach` returning a mock** — see Global Constraints.
+- **Task 9 page edit:** the replacement that mounts `<Dashboard>` in `routes/jobs/[id]/+page.svelte` silently did not apply the first time (the unit tests only checked the `job-done` marker, so they stayed green); the live browser check caught it. `job-page.test.ts` now asserts that the dashboard's summary request is made for a done job.
+- **`HistogramOptions.title` (Task 8):** ECharts replaces the wrapper's `aria-label` with its own generated description, so charts lost their names. `histogramOption` now takes a `title`, emitted as a hidden `title` component (registered via `TitleComponent` in `Chart.svelte`) so ECharts includes it in the description.
+- **`formatNum` (Task 5):** values ≥ 100 are shown as whole numbers — 3-significant-digit rounding turned a 1,502 total into "1,500".
+- **`scripts/smoke.mjs` (Task 12):** throws instead of calling `process.exit` (a hard exit with live fetch sockets trips a libuv assertion on Windows) and resolves the sample path with `fileURLToPath` (the repo path contains spaces).
+- **Vitest under load:** with the API, worker, Vite dev server and Docker all running, the default worker count can crash a Vitest worker (`ERR_IPC_CHANNEL_CLOSED`). `npx vitest run --maxWorkers=2` is reliable; every file also passes on its own.
+- **Verified live:** `node scripts/smoke.mjs` passes against the full stack (docker compose + `api_server` + `worker` + `npm run dev`), including a 1,525-customer upload built from `data/groceryElog.csv`; the dashboard renders three ECharts canvases, tiles and the 50-row table.

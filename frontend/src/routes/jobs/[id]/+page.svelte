@@ -37,7 +37,7 @@
   <p><a href="/">Upload another file</a></p>
 {:else}
   <div data-testid="job-done">
-    <h1>Forecast ready</h1>
-    <!-- Tasks 9–11 mount the dashboard, table and export button here. -->
+    <h1>Your forecast</h1>
+    <Dashboard jobId={id} />
   </div>
 {/if}
