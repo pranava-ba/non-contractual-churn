@@ -749,7 +749,11 @@ Append to the repo-root `.gitignore`:
 frontend/node_modules/
 frontend/.svelte-kit/
 frontend/build/
+# The Python "lib/" rule earlier in this file would otherwise ignore the SvelteKit source tree
+!frontend/src/lib/
 ```
+
+The last line is **required**: the repo's Python `.gitignore` contains `lib/`, which silently ignores `frontend/src/lib/` — `git add` then skips those files without an obvious error. After every commit in this plan, `git show --stat HEAD` should list the `src/lib/...` files you meant to add.
 
 - [ ] **Step 2: Write the failing proxy test**
 
@@ -1325,9 +1329,11 @@ export const QUALITY_LABEL: Record<DataQuality, string> = {
 export const QUALITY_HELP: Record<DataQuality, string> = {
   ok: 'Full forecast and CLV.',
   insufficient_history:
-    'Only one purchase on record. The forecast is computed but low-confidence, and no CLV is available.',
-  forecast_unavailable: 'The forecast could not be computed for this customer. Values are shown as 0 and are not predictions.',
-  clv_unavailable: 'The forecast is fine, but spend per order is too uncertain to estimate CLV. CLV is shown as 0 and is not a prediction.'
+    'Only one purchase on record, so the forecast is low-confidence. Any CLV shown rests on the cohort-wide average spend.',
+  forecast_unavailable:
+    'The forecast could not be computed for this customer. Values are shown as 0 and are not predictions.',
+  clv_unavailable:
+    'The forecast is fine, but spend per order is too uncertain to estimate CLV. CLV is shown as 0 and is not a prediction.'
 };
 ```
 
@@ -1335,7 +1341,7 @@ Note on `formatNum(0.012345)`: `maximumSignificantDigits: 3` yields `0.0123`, an
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `npx vitest run` — Expected: PASS. If the `insufficient_history` help text and the worker disagree on CLV (the worker leaves CLV computed as `nu * expected` for x==0 rows when the posterior mean exists), check `cpp/src/worker.cpp` ~L137 and correct the wording — the text must describe actual behaviour, not this plan's assumption.
+Run: `npx vitest run` — Expected: PASS. (Verified against `cpp/src/worker.cpp` ~L137–157: an `insufficient_history` row keeps a real `nu * expected` CLV when the Gamma-Gamma posterior mean exists, and a 0.0 placeholder when it is NaN — that case is *not* re-flagged `clv_unavailable`. Hence the help text above and the CLV-cell rule in Task 10.)
 
 - [ ] **Step 5: Commit**
 
@@ -2354,7 +2360,8 @@ Expected: FAIL — components not found.
 Cell rules (spec §6 / Global Constraints — placeholders are never shown as numbers):
 - `forecast_unavailable`: expected purchases, P(alive), CLV, interval → "—".
 - `clv_unavailable`: CLV and interval → "—"; forecast values shown.
-- `insufficient_history` and `ok`: all shown (check Task 5 step 4's note — if the worker writes CLV placeholders for x==0 rows, treat `insufficient_history` like `clv_unavailable` for the CLV cells).
+- `insufficient_history`: forecast cells shown; CLV cells shown **only when `clv_point > 0`** (the worker writes a 0.0 placeholder, still flagged `insufficient_history`, when the Gamma-Gamma posterior is undefined for that customer).
+- `ok`: all shown.
 - Interval cell: shown only when the `hasClvInterval` prop is true **and** the row's CLV is real; format `lower – upper` (en dash, spaces).
 
 ```svelte
@@ -2440,7 +2447,8 @@ Cell rules (spec §6 / Global Constraints — placeholders are never shown as nu
 
   const ariaSort = (key: SortKey) => (sort !== key ? 'none' : order === 'asc' ? 'ascending' : 'descending');
   const hasForecast = (r: CustomerRow) => r.data_quality !== 'forecast_unavailable';
-  const hasClv = (r: CustomerRow) => hasForecast(r) && r.data_quality !== 'clv_unavailable';
+  const hasClv = (r: CustomerRow) =>
+    hasForecast(r) && r.data_quality !== 'clv_unavailable' && (r.data_quality !== 'insufficient_history' || r.clv_point > 0);
 
   const COLS: { key: SortKey; label: string }[] = [
     { key: 'customer_id', label: 'Customer' },
