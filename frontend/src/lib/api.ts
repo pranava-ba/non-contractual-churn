@@ -1,4 +1,4 @@
-import type { JobInfo, JobSummary, ResultsPage, ResultsQuery } from './types';
+import type { FitMode, JobInfo, JobSummary, ResultsPage, ResultsQuery } from './types';
 
 export class ApiError extends Error {
   status: number;
@@ -33,12 +33,14 @@ export function createApi(fetchFn: typeof fetch = (...a) => fetch(...a)) {
   }
 
   return {
-    uploadCsv: (file: File) =>
-      call<{ job_id: string }>('/api/uploads', {
+    uploadCsv: (file: File, fitMode: FitMode = 'auto') =>
+      call<{ job_id: string }>(`/api/uploads?fit_mode=${fitMode}`, {
         method: 'POST',
         headers: { 'content-type': 'text/csv' },
         body: file
       }),
+    refitJob: (id: string) =>
+      call<{ job_id: string }>(`/api/jobs/${encodeURIComponent(id)}/refit`, { method: 'POST' }),
     getJob: (id: string) => call<JobInfo>(`/api/jobs/${encodeURIComponent(id)}`),
     getResults: (id: string, q: ResultsQuery) => {
       const p = new URLSearchParams({

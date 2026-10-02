@@ -13,10 +13,25 @@ describe('api client', () => {
 
     expect(out).toEqual({ job_id: 'job-1' });
     const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('/api/uploads');
+    expect(url).toBe('/api/uploads?fit_mode=auto');
     expect(init.method).toBe('POST');
     expect(new Headers(init.headers).get('content-type')).toBe('text/csv');
     expect(init.body).toBe(file);
+  });
+
+  it('sends the chosen fit mode as a query parameter', async () => {
+    const fetchFn = vi.fn(async () => json({ job_id: 'job-1' }));
+    await createApi(fetchFn).uploadCsv(new File(['x'], 'a.csv'), 'mcmc');
+    expect((fetchFn.mock.calls[0] as unknown as [string])[0]).toBe('/api/uploads?fit_mode=mcmc');
+  });
+
+  it('refitJob POSTs to the refit endpoint', async () => {
+    const fetchFn = vi.fn(async () => json({ job_id: 'job-2' }));
+    const out = await createApi(fetchFn).refitJob('job-1');
+    expect(out).toEqual({ job_id: 'job-2' });
+    const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/jobs/job-1/refit');
+    expect(init.method).toBe('POST');
   });
 
   it('surfaces the API error message for a 400 upload', async () => {

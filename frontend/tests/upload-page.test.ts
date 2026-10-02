@@ -34,6 +34,17 @@ describe('upload page', () => {
     await waitFor(() => expect(goto).toHaveBeenCalledWith('/jobs/job-42'));
   });
 
+  it('defaults to auto and passes a changed precision mode to the upload', async () => {
+    uploadCsv.mockResolvedValue({ job_id: 'job-7' });
+    render(Page);
+    await pick(new File(['customer_id,transaction_date\n1,2024-01-01\n'], 'log.csv', { type: 'text/csv' }));
+    const select = (await screen.findByLabelText(/precision/i)) as HTMLSelectElement;
+    expect(select.value).toBe('auto');
+    await fireEvent.change(select, { target: { value: 'mcmc' } });
+    await fireEvent.click(await screen.findByRole('button', { name: /forecast/i }));
+    await waitFor(() => expect(uploadCsv).toHaveBeenCalledWith(expect.any(File), 'mcmc'));
+  });
+
   it('shows header problems and does not offer to upload', async () => {
     render(Page);
     await pick(new File(['id,date\n1,2024-01-01\n'], 'log.csv', { type: 'text/csv' }));

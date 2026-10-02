@@ -3,12 +3,14 @@
   import { api, ApiError } from '$lib/api';
   import { validateFile } from '$lib/csvHeader';
   import Dropzone from '$lib/components/Dropzone.svelte';
+  import type { FitMode } from '$lib/types';
 
   let file = $state<File | null>(null);
   let problems = $state<string[]>([]);
   let hasAmount = $state(true);
   let serverError = $state('');
   let busy = $state(false);
+  let fitMode = $state<FitMode>('auto');
 
   async function onselect(f: File) {
     file = null;
@@ -24,7 +26,7 @@
     busy = true;
     serverError = '';
     try {
-      const { job_id } = await api.uploadCsv(file);
+      const { job_id } = await api.uploadCsv(file, fitMode);
       await goto(`/jobs/${job_id}`);
     } catch (e) {
       serverError = e instanceof ApiError ? e.message : 'Upload failed';
@@ -56,6 +58,14 @@
         No <code>amount</code> column — purchase forecasts only, no lifetime-value (CLV) figures.
       </p>
     {/if}
+    <label class="precision">
+      Precision
+      <select bind:value={fitMode} disabled={busy}>
+        <option value="auto">Automatic (high-precision for small cohorts)</option>
+        <option value="fast">Fast</option>
+        <option value="mcmc">High-precision (MCMC, slower)</option>
+      </select>
+    </label>
     <button onclick={submit} disabled={busy}>{busy ? 'Uploading…' : 'Upload and forecast'}</button>
   </div>
 {/if}
@@ -75,6 +85,10 @@
   }
   .ready {
     margin-top: 1rem;
+  }
+  .precision {
+    display: block;
+    margin: 0.75rem 0;
   }
   button {
     background: var(--accent);

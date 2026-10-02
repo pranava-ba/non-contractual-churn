@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import { api, ApiError } from '$lib/api';
   import { pollJob } from '$lib/poller';
   import Dashboard from '$lib/components/Dashboard.svelte';
@@ -10,6 +11,21 @@
   let job = $state<JobInfo | null>(null);
   let notFound = $state(false);
   let netError = $state('');
+  let refitting = $state(false);
+  let refitError = $state('');
+
+  async function refit() {
+    refitting = true;
+    refitError = '';
+    try {
+      const { job_id } = await api.refitJob(id);
+      await goto(`/jobs/${job_id}`);
+    } catch (e) {
+      refitError = e instanceof ApiError ? e.message : 'Could not start the refit';
+    } finally {
+      refitting = false;
+    }
+  }
 
   onMount(() => {
     const ctl = new AbortController();
@@ -38,6 +54,38 @@
 {:else}
   <div data-testid="job-done">
     <h1>Your forecast</h1>
+    <p class="fit" data-testid="fit-info">
+      Fitted with: <strong>{job.fit_method === 'mcmc' ? 'High-precision (MCMC)' : 'Fast estimator'}</strong>
+      {#if job.fit_method !== 'mcmc'}
+        <button onclick={refit} disabled={refitting}>
+          {refitting ? 'Starting…' : 'Refit with high-precision MCMC'}
+        </button>
+      {/if}
+    </p>
+    {#if job.fit_note}<p class="note">{job.fit_note}</p>{/if}
+    {#if refitError}<p class="errors" role="alert">{refitError}</p>{/if}
     <Dashboard jobId={id} />
   </div>
 {/if}
+
+<style>
+  .note {
+    color: var(--warn);
+  }
+  .errors {
+    color: var(--bad);
+  }
+  .fit button {
+    margin-left: 0.75rem;
+    background: var(--accent);
+    color: #fff;
+    border: 0;
+    border-radius: 8px;
+    padding: 0.35rem 0.8rem;
+    cursor: pointer;
+  }
+  .fit button:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
+</style>

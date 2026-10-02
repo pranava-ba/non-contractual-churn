@@ -1,10 +1,17 @@
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed';
 export type DataQuality = 'ok' | 'insufficient_history' | 'forecast_unavailable' | 'clv_unavailable';
 
+export type FitMode = 'auto' | 'fast' | 'mcmc';
+export type FitMethod = 'amortized' | 'mcmc';
+
 export interface JobInfo {
   id: string;
   status: JobStatus;
   error_reason: string | null;
+  fit_mode: FitMode;
+  fit_method: FitMethod | null;
+  fit_note: string | null;
+  source_job_id: string | null;
 }
 
 export interface CustomerRow {

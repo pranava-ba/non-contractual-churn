@@ -6,7 +6,11 @@ import type { JobInfo } from '../src/lib/types';
 const job = (status: JobInfo['status'], error_reason: string | null = null): JobInfo => ({
   id: 'j',
   status,
-  error_reason
+  error_reason,
+  fit_mode: 'auto',
+  fit_method: null,
+  fit_note: null,
+  source_job_id: null
 });
 
 describe('pollJob', () => {
