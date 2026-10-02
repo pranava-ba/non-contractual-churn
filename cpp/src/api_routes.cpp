@@ -2,7 +2,9 @@
 
 #include <charconv>
 #include <cstdint>
+#include <map>
 #include <regex>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -275,6 +277,40 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
             if (page < 1) page = 1;
             if (page_size < 1) page_size = 50;
 
+            // Sort/filter params. `sort` is mapped through a fixed whitelist -- the ORDER BY
+            // clause is the only part of this query built by string concatenation, and only
+            // ever from these literals, never from request text.
+            static const std::map<std::string, std::string> kSortColumns = {
+                {"customer_id", "c.external_customer_id"},
+                {"expected_purchases", "fr.expected_purchases"},
+                {"p_alive", "fr.p_alive"},
+                {"clv_point", "fr.clv_point"},
+                {"data_quality", "fr.data_quality"}};
+            static const std::set<std::string> kQualities = {
+                "ok", "insufficient_history", "forecast_unavailable", "clv_unavailable"};
+
+            std::string sort = req->getParameter("sort");
+            if (sort.empty()) sort = "customer_id";
+            auto sort_it = kSortColumns.find(sort);
+            if (sort_it == kSortColumns.end()) {
+                callback(JsonResponse({{"error", "invalid sort column"}}, drogon::k400BadRequest));
+                return;
+            }
+            std::string order = req->getParameter("order");
+            if (order.empty()) order = "asc";
+            if (order != "asc" && order != "desc") {
+                callback(JsonResponse({{"error", "order must be asc or desc"}},
+                                       drogon::k400BadRequest));
+                return;
+            }
+            const std::string quality = req->getParameter("quality");
+            if (!quality.empty() && kQualities.count(quality) == 0) {
+                callback(JsonResponse({{"error", "invalid quality filter"}},
+                                       drogon::k400BadRequest));
+                return;
+            }
+            const std::string search = req->getParameter("q");
+
             auto job_rows = db->execSqlSync("SELECT status FROM jobs WHERE id = $1::uuid", id);
             if (job_rows.empty() || job_rows[0]["status"].as<std::string>() != "done") {
                 callback(
@@ -282,22 +318,31 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
                 return;
             }
 
+            // $2 = quality, $3 = search; an empty string means "no filter". position(lower(x) in
+            // lower(y)) is a plain substring test, so no LIKE-wildcard escaping to get wrong.
+            const std::string where =
+                "fr.job_id = $1::uuid AND ($2::text = '' OR fr.data_quality = $2::text) "
+                "AND position(lower($3::text) in lower(c.external_customer_id)) > 0";
+
             auto count_rows = db->execSqlSync(
-                "SELECT count(*) FROM forecast_results WHERE job_id = $1::uuid", id);
+                "SELECT count(*) FROM forecast_results fr JOIN customers c ON c.id = fr.customer_id "
+                "WHERE " + where,
+                id, quality, search);
             int64_t total = count_rows[0]["count"].as<int64_t>();
 
-            // $2/$3 are cast explicitly: LIMIT/OFFSET default to Postgres's `bigint`, but the
+            // $4/$5 are cast explicitly: LIMIT/OFFSET default to Postgres's `bigint`, but the
             // wire-protocol parameter drogon sends for a C++ `int` is a 4-byte int32 -- left
             // uncast, that byte-count mismatch makes libpq fail to parse the bound message
             // ("insufficient data left in message... parameter $2"), caught empirically while
-            // testing this route with a real page_size.
+            // testing this route with a real page_size. `order` is safe to concatenate: it was
+            // validated above to be exactly "asc" or "desc".
             auto rows = db->execSqlSync(
                 "SELECT c.external_customer_id, fr.expected_purchases, fr.p_alive, "
                 "fr.clv_point, fr.clv_lower, fr.clv_upper, fr.data_quality "
                 "FROM forecast_results fr JOIN customers c ON c.id = fr.customer_id "
-                "WHERE fr.job_id = $1::uuid ORDER BY c.external_customer_id "
-                "LIMIT $2::int OFFSET $3::int",
-                id, page_size, (page - 1) * page_size);
+                "WHERE " + where + " ORDER BY " + sort_it->second + " " + order +
+                    ", c.external_customer_id ASC LIMIT $4::int OFFSET $5::int",
+                id, quality, search, page_size, (page - 1) * page_size);
 
             nlohmann::json customers = nlohmann::json::array();
             for (const auto& row : rows) {

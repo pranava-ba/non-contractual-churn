@@ -3,6 +3,7 @@
 #include <drogon/drogon.h>
 #include <nlohmann/json.hpp>
 
+#include <map>
 #include <string>
 
 #include "pareto_nbd/db.hpp"
@@ -26,6 +27,18 @@ drogon::HttpResponsePtr GetResults(const std::string& job_id,
     req->setPath("/jobs/" + job_id + "/results");
     if (!page.empty()) req->setParameter("page", page);
     if (!page_size.empty()) req->setParameter("page_size", page_size);
+    auto [result, response] = client->sendRequest(req, 5.0);
+    REQUIRE(result == drogon::ReqResult::Ok);
+    return response;
+}
+
+drogon::HttpResponsePtr GetResultsWith(const std::string& job_id,
+                                        const std::map<std::string, std::string>& params) {
+    auto client = drogon::HttpClient::newHttpClient(pareto_nbd::test::TestServerBaseUrl());
+    auto req = drogon::HttpRequest::newHttpRequest();
+    req->setMethod(drogon::Get);
+    req->setPath("/jobs/" + job_id + "/results");
+    for (const auto& [k, v] : params) req->setParameter(k, v);
     auto [result, response] = client->sendRequest(req, 5.0);
     REQUIRE(result == drogon::ReqResult::Ok);
     return response;
@@ -120,4 +133,87 @@ TEST_CASE("GET /jobs/{id}/results returns 400 for a malformed id, never touching
     REQUIRE(response->getStatusCode() == drogon::k400BadRequest);
     auto body = nlohmann::json::parse(response->getBody());
     REQUIRE(body["error"] == "invalid job id format");
+}
+
+TEST_CASE("GET /jobs/{id}/results sorts, filters by quality, and searches by customer id",
+          "[api][results]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    if (!db) { SKIP("Postgres not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+
+    auto job_rows = db->execSqlSync(
+        "INSERT INTO jobs (business_id, status, upload_path) VALUES ($1::uuid, 'done', 'x') "
+        "RETURNING id",
+        pareto_nbd::kDefaultBusinessId);
+    std::string job_id = job_rows[0]["id"].as<std::string>();
+
+    // ids sort lexically a < b < c; clv_point ascending is b (5) < c (20) < a (50).
+    struct R { const char* suffix; double p; double clv; const char* q; };
+    const R rows[] = {{"a", 0.9, 50.0, "ok"},
+                      {"b", 0.1, 5.0, "ok"},
+                      {"c", 0.5, 20.0, "insufficient_history"}};
+    for (const auto& r : rows) {
+        auto cust = db->execSqlSync(
+            "INSERT INTO customers (business_id, external_customer_id, first_seen_job_id) "
+            "VALUES ($1::uuid, $2, $3::uuid) RETURNING id",
+            pareto_nbd::kDefaultBusinessId, "Cust-" + job_id + "-" + r.suffix, job_id);
+        db->execSqlSync(
+            "INSERT INTO forecast_results (job_id, customer_id, expected_purchases, p_alive, "
+            "clv_point, clv_lower, clv_upper, model_params, data_quality) "
+            "VALUES ($1::uuid, $2::uuid, 1.0, $3, $4, $4, $4, '{}'::jsonb, $5)",
+            job_id, cust[0]["id"].as<std::string>(), r.p, r.clv, std::string(r.q));
+    }
+    auto id_of = [&](const char* s) { return "Cust-" + job_id + "-" + s; };
+
+    auto asc = nlohmann::json::parse(
+        GetResultsWith(job_id, {{"sort", "clv_point"}, {"order", "asc"}})->getBody());
+    REQUIRE(asc["customers"][0]["customer_id"] == id_of("b"));
+    REQUIRE(asc["customers"][2]["customer_id"] == id_of("a"));
+
+    auto desc = nlohmann::json::parse(
+        GetResultsWith(job_id, {{"sort", "p_alive"}, {"order", "desc"}})->getBody());
+    REQUIRE(desc["customers"][0]["customer_id"] == id_of("a"));
+    REQUIRE(desc["customers"][2]["customer_id"] == id_of("b"));
+
+    // Default (no sort params) is unchanged: customer_id ascending.
+    auto dflt = nlohmann::json::parse(GetResultsWith(job_id, {})->getBody());
+    REQUIRE(dflt["customers"][0]["customer_id"] == id_of("a"));
+
+    // quality filter: total reflects the filter, not the whole job.
+    auto only_ok = nlohmann::json::parse(GetResultsWith(job_id, {{"quality", "ok"}})->getBody());
+    REQUIRE(only_ok["total"] == 2);
+    REQUIRE(only_ok["customers"].size() == 2);
+
+    // q: case-insensitive substring on customer id; this job's ids embed the (unique) job id.
+    auto found = nlohmann::json::parse(
+        GetResultsWith(job_id, {{"q", "cust-" + job_id + "-C"}})->getBody());
+    REQUIRE(found["total"] == 1);
+    REQUIRE(found["customers"][0]["customer_id"] == id_of("c"));
+
+    // filters compose with paging.
+    auto paged = nlohmann::json::parse(
+        GetResultsWith(job_id, {{"quality", "ok"}, {"sort", "clv_point"}, {"order", "desc"},
+                                {"page", "2"}, {"page_size", "1"}})->getBody());
+    REQUIRE(paged["total"] == 2);
+    REQUIRE(paged["customers"].size() == 1);
+    REQUIRE(paged["customers"][0]["customer_id"] == id_of("b"));
+}
+
+TEST_CASE("GET /jobs/{id}/results rejects invalid sort, order and quality values",
+          "[api][results]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    if (!db) { SKIP("Postgres not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+    auto job_rows = db->execSqlSync(
+        "INSERT INTO jobs (business_id, status, upload_path) VALUES ($1::uuid, 'done', 'x') "
+        "RETURNING id",
+        pareto_nbd::kDefaultBusinessId);
+    std::string job_id = job_rows[0]["id"].as<std::string>();
+
+    REQUIRE(GetResultsWith(job_id, {{"sort", "p_alive; DROP TABLE jobs"}})->getStatusCode() ==
+            drogon::k400BadRequest);
+    REQUIRE(GetResultsWith(job_id, {{"order", "sideways"}})->getStatusCode() ==
+            drogon::k400BadRequest);
+    REQUIRE(GetResultsWith(job_id, {{"quality", "great"}})->getStatusCode() ==
+            drogon::k400BadRequest);
 }
