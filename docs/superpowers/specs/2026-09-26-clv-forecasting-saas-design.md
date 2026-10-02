@@ -109,11 +109,14 @@ Picks jobs off the Redis queue and runs the estimation pipeline:
 ([src/estimate.py](../../../src/estimate.py)) is *not* ported to C++ for
 this phase. It is iterative, stateful, and is the calibration ground truth
 behind the paper's own results — the highest-risk place to introduce a
-silent numerical bug in a from-scratch port. Any "high-precision refit"
-option in the product calls out to the existing Python implementation as a
-subprocess/microservice for now; a native C++ MCMC port is a later,
-separate sub-project once the fast path has shipped and been validated
-against real usage.
+silent numerical bug in a from-scratch port. The product's "high-precision
+refit" calls out to the existing Python implementation as a subprocess
+(`src/mcmc_cli.py`, built as spec phase 6 -- see
+`docs/superpowers/plans/2026-10-02-mcmc-high-precision-path.md`): selectable per
+upload (`fit_mode` = auto / fast / mcmc), automatic for small cohorts, and as a
+post-hoc `POST /jobs/{id}/refit`. Any failure falls back to the amortized fit with
+a user-visible note. A native C++ MCMC port remains a later, separate
+sub-project.
 
 ### 4.4 Storage
 - **PostgreSQL**: job metadata, per-customer forecast results (JSONB for
@@ -289,7 +292,7 @@ assumed.
    (`frontend/`; adds `GET /jobs/{id}/summary` and sort/filter params on
    `/results` to the API).
 6. (Stretch, non-blocking) High-precision MCMC path as an optional
-   Python-subprocess call.
+   Python-subprocess call. **Built 2026-10-02.**
 
 ## 10. Out of scope (this phase)
 
