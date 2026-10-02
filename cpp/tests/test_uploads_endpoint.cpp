@@ -24,11 +24,11 @@
 
 namespace {
 
-drogon::HttpResponsePtr PostUpload(const std::string& csv_body) {
+drogon::HttpResponsePtr PostUpload(const std::string& csv_body, const std::string& query = "") {
     auto client = drogon::HttpClient::newHttpClient(pareto_nbd::test::TestServerBaseUrl());
     auto req = drogon::HttpRequest::newHttpRequest();
     req->setMethod(drogon::Post);
-    req->setPath("/uploads");
+    req->setPath("/uploads" + query);
     req->setBody(csv_body);
     auto [result, response] = client->sendRequest(req, 5.0);
     REQUIRE(result == drogon::ReqResult::Ok);
@@ -164,4 +164,46 @@ TEST_CASE("POST /uploads returns 503 and marks the job failed when enqueueing fa
     REQUIRE(rows.size() == 1);
     REQUIRE(rows[0]["status"].as<std::string>() == "failed");
     REQUIRE_FALSE(rows[0]["error_reason"].isNull());
+}
+
+TEST_CASE("POST /uploads stores the requested fit_mode and defaults to auto", "[api][uploads]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    auto redis = pareto_nbd::ConnectRedis(pareto_nbd::kTestRedisUri);
+    if (!db || !redis) { SKIP("Postgres/Redis not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+    const std::string csv =
+        "customer_id,transaction_date,amount\n"
+        "A,2024-01-01,10.0\n"
+        "A,2024-01-08,5.0\n";
+
+    auto fast = PostUpload(csv, "?fit_mode=fast");
+    REQUIRE(fast->getStatusCode() == drogon::k200OK);
+    auto r1 = db->execSqlSync("SELECT fit_mode FROM jobs WHERE id = $1::uuid",
+                              nlohmann::json::parse(fast->getBody())["job_id"].get<std::string>());
+    REQUIRE(r1[0]["fit_mode"].as<std::string>() == "fast");
+
+    auto dflt = PostUpload(csv);
+    REQUIRE(dflt->getStatusCode() == drogon::k200OK);
+    auto r2 = db->execSqlSync("SELECT fit_mode FROM jobs WHERE id = $1::uuid",
+                              nlohmann::json::parse(dflt->getBody())["job_id"].get<std::string>());
+    REQUIRE(r2[0]["fit_mode"].as<std::string>() == "auto");
+
+    // Drain the two ids this test pushed, so they don't leak to tests that dequeue next.
+    REQUIRE(pareto_nbd::DequeueJob(redis, 2, pareto_nbd::kTestJobQueueKey).has_value());
+    REQUIRE(pareto_nbd::DequeueJob(redis, 2, pareto_nbd::kTestJobQueueKey).has_value());
+}
+
+TEST_CASE("POST /uploads rejects an unknown fit_mode", "[api][uploads]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    auto redis = pareto_nbd::ConnectRedis(pareto_nbd::kTestRedisUri);
+    if (!db || !redis) { SKIP("Postgres/Redis not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+
+    auto response = PostUpload("customer_id,transaction_date\n"
+                               "A,2024-01-01\n",
+                               "?fit_mode=bogus");
+
+    REQUIRE(response->getStatusCode() == drogon::k400BadRequest);
+    REQUIRE(nlohmann::json::parse(response->getBody())["error"] ==
+            "fit_mode must be one of: auto, fast, mcmc");
 }

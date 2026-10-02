@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 
+#include "pareto_nbd/fit_policy.hpp"
 #include "pareto_nbd/ingest.hpp"
 
 namespace pareto_nbd {
@@ -26,6 +27,21 @@ drogon::HttpResponsePtr JsonResponse(const nlohmann::json& body, drogon::HttpSta
 }
 
 namespace {
+
+// Pushes job_id onto the queue. On failure marks the already-inserted row failed (so
+// GET /jobs/{id} tells the truth) and returns the 503 response to send, else nullptr.
+drogon::HttpResponsePtr EnqueueOrFailResponse(drogon::orm::DbClientPtr db,
+                                               drogon::nosql::RedisClientPtr redis,
+                                               const std::string& queue_key,
+                                               const std::string& job_id) {
+    if (EnqueueJob(redis, job_id, queue_key)) return nullptr;
+    db->execSqlSync(
+        "UPDATE jobs SET status = 'failed', error_reason = $2, completed_at = now() "
+        "WHERE id = $1::uuid",
+        job_id, std::string("could not enqueue job for processing (queue unavailable)"));
+    return JsonResponse({{"error", "job queue unavailable, please retry"}, {"job_id", job_id}},
+                        drogon::k503ServiceUnavailable);
+}
 
 // Validates that `id` is syntactically a UUID (standard 8-4-4-4-12 hex format with dashes)
 // BEFORE it ever reaches a `::uuid`-cast SQL query. /jobs/{id} is the first route in this
@@ -171,6 +187,15 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
                 return;
             }
 
+            std::string mode_str = req->getParameter("fit_mode");
+            if (mode_str.empty()) mode_str = "auto";
+            auto mode = pareto_nbd::ParseFitMode(mode_str);
+            if (!mode) {
+                callback(JsonResponse({{"error", "fit_mode must be one of: auto, fast, mcmc"}},
+                                       drogon::k400BadRequest));
+                return;
+            }
+
             // Server-generated key -- the only caller-controlled input is the raw CSV bytes
             // stored *at* this key, never the key itself.
             std::string key = "uploads/" + drogon::utils::getUuid() + ".csv";
@@ -185,26 +210,15 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
             }
 
             auto rows = db->execSqlSync(
-                "INSERT INTO jobs (business_id, status, upload_path) "
-                "VALUES ($1::uuid, 'queued', $2) RETURNING id",
-                pareto_nbd::kDefaultBusinessId, key);
+                "INSERT INTO jobs (business_id, status, upload_path, fit_mode) "
+                "VALUES ($1::uuid, 'queued', $2, $3) RETURNING id",
+                pareto_nbd::kDefaultBusinessId, key, pareto_nbd::ToString(*mode));
             std::string job_id = rows[0]["id"].as<std::string>();
 
-            // If the push to Redis fails, no worker will ever see this job: returning 200 with
-            // a job_id here would hand the client an id that stays 'queued' forever. Instead
-            // mark the already-inserted row failed (so GET /jobs/{id} tells the truth if the
-            // id is ever looked up) and tell the client to retry with a 503.
-            if (!pareto_nbd::EnqueueJob(redis, job_id, queue_key)) {
-                db->execSqlSync(
-                    "UPDATE jobs SET status = 'failed', error_reason = $2, completed_at = now() "
-                    "WHERE id = $1::uuid",
-                    job_id,
-                    std::string("could not enqueue job for processing (queue unavailable)"));
-                // job_id is still returned so the client can reference the failed job
-                // (GET /jobs/{id} reports it as 'failed' with this reason).
-                callback(JsonResponse(
-                    {{"error", "job queue unavailable, please retry"}, {"job_id", job_id}},
-                    drogon::k503ServiceUnavailable));
+            // If the push to Redis fails, no worker will ever see this job: see
+            // EnqueueOrFailResponse (marks the row failed and answers 503 with the job id).
+            if (auto fail = EnqueueOrFailResponse(db, redis, queue_key, job_id)) {
+                callback(fail);
                 return;
             }
 
@@ -228,7 +242,8 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
                 return;
             }
             auto rows = db->execSqlSync(
-                "SELECT status, error_reason FROM jobs WHERE id = $1::uuid", id);
+                "SELECT status, error_reason, fit_mode, fit_method, fit_note, "
+                "source_job_id::text AS source_job_id FROM jobs WHERE id = $1::uuid", id);
             if (rows.empty()) {
                 callback(JsonResponse({{"error", "job not found"}}, drogon::k404NotFound));
                 return;
@@ -237,9 +252,54 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
             body["error_reason"] = rows[0]["error_reason"].isNull()
                                         ? nlohmann::json(nullptr)
                                         : nlohmann::json(rows[0]["error_reason"].as<std::string>());
+            auto nullable = [&](const char* col) {
+                return rows[0][col].isNull() ? nlohmann::json(nullptr)
+                                             : nlohmann::json(rows[0][col].as<std::string>());
+            };
+            body["fit_mode"] = rows[0]["fit_mode"].as<std::string>();
+            body["fit_method"] = nullable("fit_method");
+            body["fit_note"] = nullable("fit_note");
+            body["source_job_id"] = nullable("source_job_id");
             callback(JsonResponse(body, drogon::k200OK));
         },
         {drogon::Get});
+
+    // POST /jobs/{id}/refit: queue a new high-precision (MCMC) job over the same upload as a
+    // finished job. The new job's source_job_id points back at the original so the two can be
+    // compared. Only a 'done' job can be refit (a queued/running one has no result to improve on
+    // and a failed one failed for reasons a refit won't fix).
+    drogon::app().registerHandler(
+        "/jobs/{id}/refit",
+        [db, redis, queue_key](const drogon::HttpRequestPtr&,
+                               std::function<void(const drogon::HttpResponsePtr&)>&& callback,
+                               const std::string& id) {
+            if (!IsValidUuidFormat(id)) {
+                callback(JsonResponse({{"error", "invalid job id format"}}, drogon::k400BadRequest));
+                return;
+            }
+            auto rows = db->execSqlSync(
+                "SELECT status, upload_path FROM jobs WHERE id = $1::uuid", id);
+            if (rows.empty()) {
+                callback(JsonResponse({{"error", "job not found"}}, drogon::k404NotFound));
+                return;
+            }
+            if (rows[0]["status"].as<std::string>() != "done") {
+                callback(JsonResponse({{"error", "only a finished job can be refit"}},
+                                       drogon::k409Conflict));
+                return;
+            }
+            auto ins = db->execSqlSync(
+                "INSERT INTO jobs (business_id, status, upload_path, fit_mode, source_job_id) "
+                "VALUES ($1::uuid, 'queued', $2, 'mcmc', $3::uuid) RETURNING id",
+                pareto_nbd::kDefaultBusinessId, rows[0]["upload_path"].as<std::string>(), id);
+            std::string new_id = ins[0]["id"].as<std::string>();
+            if (auto fail = EnqueueOrFailResponse(db, redis, queue_key, new_id)) {
+                callback(fail);
+                return;
+            }
+            callback(JsonResponse({{"job_id", new_id}}, drogon::k200OK));
+        },
+        {drogon::Post});
 
     // GET /jobs/{id}/results: paginated per-customer forecasts for a completed job. Same
     // id-into-::uuid-cast pattern as /jobs/{id} above, so the same format check runs first.
