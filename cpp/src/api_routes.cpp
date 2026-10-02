@@ -1,9 +1,11 @@
 #include "pareto_nbd/api_routes.hpp"
 
 #include <charconv>
+#include <cstdint>
 #include <regex>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "pareto_nbd/ingest.hpp"
 
@@ -83,6 +85,44 @@ std::string FormatDouble(double value) {
         return "0";  // unreachable for a 64-byte buffer; never emit garbage if it ever is
     }
     return std::string(buf, ptr);
+}
+
+// Builds {"edges": [...], "counts": [...]} for one forecast_results column of one job.
+// `column` and `quality_clause` are TRUSTED string literals supplied by this file's own call
+// sites below -- never request data -- so concatenating them into the SQL is safe; the job id
+// and numeric parameters are always bound. Bin edges run from 0 to `hi`; width_bucket returns
+// bucket `bins + 1` for a value exactly equal to `hi`, so the result is clamped into
+// [1, bins] (otherwise the maximum value would silently fall out of the chart).
+// $2::float8 / $3::int casts are required, same wire-format reason as /results's LIMIT/OFFSET.
+nlohmann::json BuildHistogram(const drogon::orm::DbClientPtr& db, const std::string& job_id,
+                              const std::string& column, const std::string& quality_clause,
+                              int bins, const double* fixed_hi) {
+    double hi = 1.0;
+    if (fixed_hi != nullptr) {
+        hi = *fixed_hi;
+    } else {
+        auto max_rows = db->execSqlSync(
+            "SELECT COALESCE(max(fr." + column + "), 0)::float8 AS m FROM forecast_results fr "
+            "WHERE fr.job_id = $1::uuid AND " + quality_clause,
+            job_id);
+        hi = max_rows[0]["m"].as<double>();
+        if (!(hi > 0.0)) hi = 1.0;  // empty or all-zero column: any positive range will do
+    }
+
+    auto rows = db->execSqlSync(
+        "SELECT LEAST(GREATEST(width_bucket(fr." + column +
+            ", 0::float8, $2::float8, $3::int), 1), $3::int) AS b, count(*)::bigint AS n "
+        "FROM forecast_results fr WHERE fr.job_id = $1::uuid AND " + quality_clause +
+            " GROUP BY b ORDER BY b",
+        job_id, hi, bins);
+
+    std::vector<int64_t> counts(static_cast<size_t>(bins), 0);
+    for (const auto& row : rows) {
+        counts[static_cast<size_t>(row["b"].as<int>() - 1)] = row["n"].as<int64_t>();
+    }
+    std::vector<double> edges;
+    for (int i = 0; i <= bins; ++i) edges.push_back(hi * i / bins);
+    return {{"edges", edges}, {"counts", counts}};
 }
 
 }  // namespace
@@ -278,6 +318,68 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
             }
             nlohmann::json body{{"job_id", id}, {"page", page}, {"page_size", page_size},
                                  {"total", total}, {"customers", customers}};
+            callback(JsonResponse(body, drogon::k200OK));
+        },
+        {drogon::Get});
+
+    // GET /jobs/{id}/summary: cohort-level aggregates and histograms for the dashboard (Phase 5
+    // frontend). Computed in SQL so the browser never has to download every customer row.
+    // Same id validation and 404-until-done gate as /results. Placeholder rows (see
+    // data_quality in worker.cpp) are excluded from every statistic they would corrupt:
+    // forecast statistics use ok + insufficient_history rows, CLV statistics use ok rows only.
+    drogon::app().registerHandler(
+        "/jobs/{id}/summary",
+        [db](const drogon::HttpRequestPtr&,
+             std::function<void(const drogon::HttpResponsePtr&)>&& callback,
+             const std::string& id) {
+            if (!IsValidUuidFormat(id)) {
+                callback(
+                    JsonResponse({{"error", "invalid job id format"}}, drogon::k400BadRequest));
+                return;
+            }
+            auto job_rows = db->execSqlSync("SELECT status FROM jobs WHERE id = $1::uuid", id);
+            if (job_rows.empty() || job_rows[0]["status"].as<std::string>() != "done") {
+                callback(
+                    JsonResponse({{"error", "job not found or not done"}}, drogon::k404NotFound));
+                return;
+            }
+
+            const std::string kValidForecast =
+                "fr.data_quality IN ('ok','insufficient_history')";
+            const std::string kValidClv = "fr.data_quality = 'ok'";
+
+            auto agg = db->execSqlSync(
+                "SELECT count(*)::bigint AS n, "
+                "COALESCE(avg(fr.p_alive) FILTER (WHERE " + kValidForecast + "), 0)::float8 AS mean_p, "
+                "COALESCE(sum(fr.expected_purchases) FILTER (WHERE " + kValidForecast + "), 0)::float8 AS sum_ep, "
+                "COALESCE(sum(fr.clv_point) FILTER (WHERE " + kValidClv + "), 0)::float8 AS sum_clv, "
+                "COALESCE(bool_or(fr.clv_upper > fr.clv_lower), false) AS has_interval "
+                "FROM forecast_results fr WHERE fr.job_id = $1::uuid",
+                id);
+
+            nlohmann::json quality_counts = nlohmann::json::object();
+            auto q_rows = db->execSqlSync(
+                "SELECT data_quality, count(*)::bigint AS n FROM forecast_results "
+                "WHERE job_id = $1::uuid GROUP BY data_quality",
+                id);
+            for (const auto& row : q_rows) {
+                quality_counts[row["data_quality"].as<std::string>()] = row["n"].as<int64_t>();
+            }
+
+            const double p_alive_hi = 1.0;
+            nlohmann::json body{
+                {"job_id", id},
+                {"n_customers", agg[0]["n"].as<int64_t>()},
+                {"quality_counts", quality_counts},
+                {"mean_p_alive", agg[0]["mean_p"].as<double>()},
+                {"total_expected_purchases", agg[0]["sum_ep"].as<double>()},
+                {"total_clv", agg[0]["sum_clv"].as<double>()},
+                {"has_clv_interval", agg[0]["has_interval"].as<bool>()},
+                {"histograms",
+                 {{"p_alive", BuildHistogram(db, id, "p_alive", kValidForecast, 10, &p_alive_hi)},
+                  {"expected_purchases",
+                   BuildHistogram(db, id, "expected_purchases", kValidForecast, 20, nullptr)},
+                  {"clv_point", BuildHistogram(db, id, "clv_point", kValidClv, 20, nullptr)}}}};
             callback(JsonResponse(body, drogon::k200OK));
         },
         {drogon::Get});
