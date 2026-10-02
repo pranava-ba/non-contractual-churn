@@ -6,6 +6,7 @@
   import type { DataQuality, JobSummary } from '$lib/types';
   import Chart from './Chart.svelte';
   import CustomerTable from './CustomerTable.svelte';
+  import ExportBar from './ExportBar.svelte';
   import SummaryTiles from './SummaryTiles.svelte';
 
   let { jobId }: { jobId: string } = $props();
@@ -30,6 +31,7 @@
   <p>Loading results…</p>
 {:else}
   <SummaryTiles {summary} />
+  <ExportBar {jobId} qualityCounts={summary.quality_counts} />
   <div class="charts">
     <section>
       <h3>How likely is each customer to still be active?</h3>
@@ -68,7 +70,6 @@
     {/if}
   </div>
   <CustomerTable {jobId} hasClvInterval={summary.has_clv_interval} {qualities} />
-  <!-- Task 11 mounts the export button. -->
 {/if}
 
 <style>
