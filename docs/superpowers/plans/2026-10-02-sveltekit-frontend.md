@@ -22,6 +22,7 @@
 - **PIT / calibration diagnostic (spec §4.1) is deferred.** A PIT plot needs a held-out future; production uploads have none, so there is nothing to compute it from. The dashboard ships forecast-distribution, P(alive) and CLV histograms instead. Revisit when a holdout/backtest mode exists.
 - **Same-origin proxy:** the browser calls `/api/...`; the server forwards to `API_BASE_URL` (default `http://localhost:8080`). Production (`adapter-node`) must run with `BODY_SIZE_LIMIT=100M` — its default of 512 KB would reject real uploads. The upload request uses `Content-Type: text/csv` so SvelteKit's form-CSRF origin check (which only guards form content types) does not apply.
 - **Node ≥ 20** (dev machine has Node 24 / npm 11). Frontend lives at `frontend/`; do not touch `cpp/` outside Tasks 1–2.
+- **Vitest gotcha:** never write `beforeEach(() => someMock.mockReset())` — the arrow returns the mock function, which Vitest runs as a teardown hook (a rejecting mock then surfaces as a bogus unhandled rejection). Use a braced body.
 - **Commits:** frequent, one per task step 5; messages `feat(cpp): ...` / `feat(frontend): ...` in the style of the existing history.
 
 ---
@@ -1419,7 +1420,10 @@ const pick = async (file: File) =>
   fireEvent.change(screen.getByLabelText(/choose a csv/i), { target: { files: [file] } });
 
 describe('upload page', () => {
-  beforeEach(() => { goto.mockReset(); uploadCsv.mockReset(); });
+  beforeEach(() => {
+    goto.mockReset();
+    uploadCsv.mockReset();
+  });
 
   it('uploads a valid file and navigates to the job page', async () => {
     uploadCsv.mockResolvedValue({ job_id: 'job-42' });
@@ -1702,7 +1706,9 @@ import { ApiError } from '../src/lib/api';
 import Page from '../src/routes/jobs/[id]/+page.svelte';
 
 describe('job page', () => {
-  beforeEach(() => getJob.mockReset());
+  beforeEach(() => {
+    getJob.mockReset(); // braces matter: a returned function would be run by Vitest as a teardown hook
+  });
 
   it('shows progress then the done state', async () => {
     getJob.mockResolvedValueOnce({ id: 'job-1', status: 'running', error_reason: null })
@@ -2073,7 +2079,9 @@ const summary = {
 };
 
 describe('Dashboard', () => {
-  beforeEach(() => getSummary.mockReset());
+  beforeEach(() => {
+    getSummary.mockReset();
+  });
 
   it('loads the summary and renders the three charts', async () => {
     getSummary.mockResolvedValue(summary);
