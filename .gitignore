@@ -104,3 +104,5 @@ references/
 frontend/node_modules/
 frontend/.svelte-kit/
 frontend/build/
+# The Python "lib/" rule above would otherwise ignore the SvelteKit source tree
+!frontend/src/lib/
