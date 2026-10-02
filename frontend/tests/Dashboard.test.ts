@@ -4,7 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const getSummary = vi.fn();
 vi.mock('$lib/api', async (orig) => {
   const actual = await orig<typeof import('../src/lib/api')>();
-  return { ...actual, api: { getSummary: (...a: unknown[]) => getSummary(...a) } };
+  return {
+    ...actual,
+    api: {
+      getSummary: (...a: unknown[]) => getSummary(...a),
+      getResults: () => new Promise(() => {}) // keep the table in its loading state
+    }
+  };
 });
 vi.mock('../src/lib/components/Chart.svelte', async () => ({
   default: (await import('./stubs/ChartStub.svelte')).default

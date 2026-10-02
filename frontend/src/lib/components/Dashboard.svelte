@@ -3,8 +3,9 @@
   import { api, ApiError } from '$lib/api';
   import { histogramOption } from '$lib/chartOptions';
   import { formatMoney, formatNum, formatPct } from '$lib/format';
-  import type { JobSummary } from '$lib/types';
+  import type { DataQuality, JobSummary } from '$lib/types';
   import Chart from './Chart.svelte';
+  import CustomerTable from './CustomerTable.svelte';
   import SummaryTiles from './SummaryTiles.svelte';
 
   let { jobId }: { jobId: string } = $props();
@@ -20,6 +21,7 @@
   });
 
   const hasClv = $derived((summary?.quality_counts.ok ?? 0) > 0);
+  const qualities = $derived(Object.keys(summary?.quality_counts ?? {}) as DataQuality[]);
 </script>
 
 {#if error}
@@ -65,7 +67,8 @@
       </section>
     {/if}
   </div>
-  <!-- Task 10 mounts <CustomerTable />, Task 11 the export button. -->
+  <CustomerTable {jobId} hasClvInterval={summary.has_clv_interval} {qualities} />
+  <!-- Task 11 mounts the export button. -->
 {/if}
 
 <style>
