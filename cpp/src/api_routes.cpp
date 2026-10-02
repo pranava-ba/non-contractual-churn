@@ -278,13 +278,29 @@ void RegisterApiRoutes(std::shared_ptr<UploadStorage> storage,
                 return;
             }
             auto rows = db->execSqlSync(
-                "SELECT status, upload_path FROM jobs WHERE id = $1::uuid", id);
+                "SELECT status, upload_path, fit_method FROM jobs WHERE id = $1::uuid", id);
             if (rows.empty()) {
                 callback(JsonResponse({{"error", "job not found"}}, drogon::k404NotFound));
                 return;
             }
             if (rows[0]["status"].as<std::string>() != "done") {
                 callback(JsonResponse({{"error", "only a finished job can be refit"}},
+                                       drogon::k409Conflict));
+                return;
+            }
+            if (!rows[0]["fit_method"].isNull() &&
+                rows[0]["fit_method"].as<std::string>() == "mcmc") {
+                callback(JsonResponse({{"error", "this job was already fitted with high-precision MCMC"}},
+                                       drogon::k409Conflict));
+                return;
+            }
+            // The worker is a single synchronous loop, so each refit blocks every job behind
+            // it. One pending refit per source job keeps repeated clicks from piling them up.
+            auto pending = db->execSqlSync(
+                "SELECT 1 FROM jobs WHERE source_job_id = $1::uuid AND status IN ('queued','running') LIMIT 1",
+                id);
+            if (!pending.empty()) {
+                callback(JsonResponse({{"error", "a refit of this job is already in progress"}},
                                        drogon::k409Conflict));
                 return;
             }

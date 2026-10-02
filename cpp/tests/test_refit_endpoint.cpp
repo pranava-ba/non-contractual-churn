@@ -60,3 +60,38 @@ TEST_CASE("POST /jobs/{id}/refit rejects bad, unknown and unfinished jobs", "[ap
         REQUIRE(PostRefit(InsertJob(db, st))->getStatusCode() == drogon::k409Conflict);
     }
 }
+
+TEST_CASE("POST /jobs/{id}/refit refuses a duplicate while a refit is already pending",
+          "[api][refit]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    auto redis = pareto_nbd::ConnectRedis(pareto_nbd::kTestRedisUri);
+    if (!db || !redis) { SKIP("Postgres/Redis not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+    std::string src = InsertJob(db, "done");
+
+    auto first = PostRefit(src);
+    REQUIRE(first->getStatusCode() == drogon::k200OK);
+    auto second = PostRefit(src);
+    REQUIRE(second->getStatusCode() == drogon::k409Conflict);
+    REQUIRE(nlohmann::json::parse(second->getBody())["error"] ==
+            "a refit of this job is already in progress");
+
+    auto n = db->execSqlSync("SELECT count(*) AS n FROM jobs WHERE source_job_id = $1::uuid", src);
+    REQUIRE(n[0]["n"].as<int>() == 1);
+    REQUIRE(pareto_nbd::DequeueJob(redis, 2, pareto_nbd::kTestJobQueueKey).has_value());
+}
+
+TEST_CASE("POST /jobs/{id}/refit refuses a job that was already fitted with MCMC", "[api][refit]") {
+    auto db = pareto_nbd::ConnectDb(pareto_nbd::kTestConnString);
+    if (!db) { SKIP("Postgres not reachable"); }
+    pareto_nbd::ApplySchema(db, std::string(PROJECT_ROOT_DIR) + "/db/schema.sql");
+    std::string src = db->execSqlSync(
+        "INSERT INTO jobs (business_id, status, upload_path, fit_method) "
+        "VALUES ($1::uuid, 'done', 'uploads/x.csv', 'mcmc') RETURNING id",
+        pareto_nbd::kDefaultBusinessId)[0]["id"].as<std::string>();
+
+    auto resp = PostRefit(src);
+    REQUIRE(resp->getStatusCode() == drogon::k409Conflict);
+    REQUIRE(nlohmann::json::parse(resp->getBody())["error"] ==
+            "this job was already fitted with high-precision MCMC");
+}

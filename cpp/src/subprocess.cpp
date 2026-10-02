@@ -51,13 +51,25 @@ SubprocessResult RunWithTimeout(const std::vector<std::string>& argv, int timeou
     STARTUPINFOA si{};
     si.cb = sizeof(si);
     PROCESS_INFORMATION pi{};
-    if (!CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr,
-                        nullptr, &si, &pi)) {
+    // Start suspended and put the child in a Job Object first, so any process IT spawns (a venv
+    // or `py` launcher starts the real interpreter as a child) is in the job too and dies with
+    // it. TerminateProcess alone would orphan that grandchild.
+    if (!CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE,
+                        CREATE_NO_WINDOW | CREATE_SUSPENDED, nullptr, nullptr, &si, &pi)) {
         return r;
     }
+    HANDLE job = CreateJobObjectA(nullptr, nullptr);
+    if (job) {
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits));
+        AssignProcessToJobObject(job, pi.hProcess);  // best effort: still run if this fails
+    }
+    ResumeThread(pi.hThread);
     r.launched = true;
     DWORD w = WaitForSingleObject(pi.hProcess, static_cast<DWORD>(timeout_seconds) * 1000);
     if (w == WAIT_TIMEOUT) {
+        if (job) TerminateJobObject(job, 1);
         TerminateProcess(pi.hProcess, 1);
         WaitForSingleObject(pi.hProcess, 5000);
         r.timed_out = true;
@@ -68,6 +80,7 @@ SubprocessResult RunWithTimeout(const std::vector<std::string>& argv, int timeou
     }
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+    if (job) CloseHandle(job);  // KILL_ON_JOB_CLOSE reaps anything the child left behind
     return r;
 }
 #else
@@ -80,6 +93,7 @@ SubprocessResult RunWithTimeout(const std::vector<std::string>& argv, int timeou
     pid_t pid = fork();
     if (pid < 0) return r;
     if (pid == 0) {
+        setpgid(0, 0);  // own process group, so a timeout can kill the whole tree
         execvp(args[0], args.data());
         _exit(127);
     }
@@ -93,6 +107,7 @@ SubprocessResult RunWithTimeout(const std::vector<std::string>& argv, int timeou
             return r;
         }
         if (std::chrono::steady_clock::now() >= deadline) {
+            kill(-pid, SIGKILL);
             kill(pid, SIGKILL);
             waitpid(pid, &status, 0);
             r.timed_out = true;
