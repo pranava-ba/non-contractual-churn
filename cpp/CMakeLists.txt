@@ -46,6 +46,7 @@ add_library(amortized_inference
     src/storage.cpp
     src/queue.cpp
     src/forecast.cpp
+    src/fit_policy.cpp
     src/worker.cpp
     src/api_routes.cpp
 )
@@ -101,6 +102,7 @@ add_executable(unit_tests
     tests/test_summary_endpoint.cpp
     tests/test_export_endpoint.cpp
     tests/test_forecast.cpp
+    tests/test_fit_policy.cpp
     tests/test_worker.cpp
     tests/test_integration_upload_to_results.cpp
 )

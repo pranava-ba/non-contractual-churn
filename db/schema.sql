@@ -58,3 +58,13 @@ ALTER TABLE forecast_results ADD COLUMN IF NOT EXISTS data_quality TEXT NOT NULL
 INSERT INTO businesses (id, name)
 VALUES ('00000000-0000-0000-0000-000000000001', 'default')
 ON CONFLICT (id) DO NOTHING;
+
+-- Fit selection. fit_mode is what the user asked for (auto, fast or mcmc). fit_method is what
+-- the worker actually used (amortized or mcmc, NULL until the job finishes). fit_note explains
+-- a fallback (for example the high-precision refit could not run). source_job_id links a refit
+-- job to the job it re-fits. mcmc_draws_path is the storage key of the saved posterior draws.
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS fit_mode TEXT NOT NULL DEFAULT 'auto' CHECK (fit_mode IN ('auto','fast','mcmc'));
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS fit_method TEXT CHECK (fit_method IN ('amortized','mcmc'));
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS fit_note TEXT;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS source_job_id UUID REFERENCES jobs(id);
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS mcmc_draws_path TEXT;
