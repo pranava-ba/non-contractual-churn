@@ -99,3 +99,8 @@ references/
 # Run logs & markers
 *.log
 *.done
+
+# Frontend
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
