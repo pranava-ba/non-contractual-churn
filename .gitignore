@@ -106,3 +106,6 @@ frontend/.svelte-kit/
 frontend/build/
 # The Python "lib/" rule above would otherwise ignore the SvelteKit source tree
 !frontend/src/lib/
+
+# C++ test scratch dirs
+cpp/data/
