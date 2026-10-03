@@ -50,7 +50,11 @@ job queue and job-status cache between the API and workers.
 - **Dashboard**: cohort-level charts (forecast distribution, PIT/calibration
   diagnostic, P(active) histogram) via **ECharts** (through a Svelte
   wrapper), plus a sortable/filterable per-customer table (expected
-  purchases, P(alive), CLV point + interval).
+  purchases, P(alive), CLV point + interval). *(The PIT/calibration
+  diagnostic is deferred: it needs a held-out future that production uploads
+  do not have. CLV intervals appear once the worker fits a conformal
+  interval; until then the table shows point CLV only. See
+  `docs/superpowers/plans/2026-10-02-sveltekit-frontend.md`.)*
 - **Export**: button triggers `GET /jobs/{id}/export.csv`.
 
 ### 4.2 API — Drogon (C++20)
@@ -68,8 +72,14 @@ nlohmann/json) are used directly; no separate ORM layer.
 ### 4.3 Worker — C++
 Picks jobs off the Redis queue and runs the estimation pipeline:
 1. **Ingestion**: Apache Arrow C++ reads the uploaded CSV and computes
-   per-customer RFM features (frequency, recency, T, monetary value) via
-   Arrow's group-by/aggregate compute functions. This is the stage that
+   per-customer RFM features (frequency, recency, T, monetary value). Arrow's
+   `SortIndices`/`Take` compute functions sort the parsed table by
+   `(customer_id, transaction_date)` so each customer's rows land contiguous
+   and date-ordered; the per-customer rolling stats (first/last date, repeat
+   count, summed same-day spend) are then produced by a hand-written linear
+   scan over that sorted table rather than Arrow's `Aggregate` API, which is
+   built for simple reductions like sum/count/mean per group and not the
+   multi-field "first/last/count" logic this needs. This is the stage that
    has to handle scale, hence Arrow rather than a hand-rolled parser.
 2. **Fast-path estimation**: the existing amortized neural Pareto/NBD
    estimator ([src/amortized.py](../../../src/amortized.py)) continues to be
@@ -99,11 +109,14 @@ Picks jobs off the Redis queue and runs the estimation pipeline:
 ([src/estimate.py](../../../src/estimate.py)) is *not* ported to C++ for
 this phase. It is iterative, stateful, and is the calibration ground truth
 behind the paper's own results — the highest-risk place to introduce a
-silent numerical bug in a from-scratch port. Any "high-precision refit"
-option in the product calls out to the existing Python implementation as a
-subprocess/microservice for now; a native C++ MCMC port is a later,
-separate sub-project once the fast path has shipped and been validated
-against real usage.
+silent numerical bug in a from-scratch port. The product's "high-precision
+refit" calls out to the existing Python implementation as a subprocess
+(`src/mcmc_cli.py`, built as spec phase 6 -- see
+`docs/superpowers/plans/2026-10-02-mcmc-high-precision-path.md`): selectable per
+upload (`fit_mode` = auto / fast / mcmc), automatic for small cohorts, and as a
+post-hoc `POST /jobs/{id}/refit`. Any failure falls back to the amortized fit with
+a user-visible note. A native C++ MCMC port remains a later, separate
+sub-project.
 
 ### 4.4 Storage
 - **PostgreSQL**: job metadata, per-customer forecast results (JSONB for
@@ -275,8 +288,11 @@ assumed.
 4. Drogon API: upload → validate → enqueue → worker picks up → writes
    results to Postgres.
 5. SvelteKit frontend: upload flow, dashboard, export — wired to the API.
+   Implemented per `docs/superpowers/plans/2026-10-02-sveltekit-frontend.md`
+   (`frontend/`; adds `GET /jobs/{id}/summary` and sort/filter params on
+   `/results` to the API).
 6. (Stretch, non-blocking) High-precision MCMC path as an optional
-   Python-subprocess call.
+   Python-subprocess call. **Built 2026-10-02.**
 
 ## 10. Out of scope (this phase)
 

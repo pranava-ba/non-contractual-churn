@@ -9,6 +9,25 @@ All notable changes to this project are documented here. The format is based on
 <!-- Dated development log: a running record of what was done each session (newest first),
      alongside the usual Keep-a-Changelog release notes grouped within each day. -->
 
+### 2026-10-02 — C++ SaaS app: spec phase 6, high-precision MCMC path
+- **Optional MCMC fit via a Python subprocess** (branch `worktree-amortized-onnx-cpp-inference`).
+  `src/mcmc_cli.py` wraps `estimate.fit_mcmc` (cohort CSV in, posterior-mean `r, alpha, s, beta`
+  JSON + a draws `.npz` out). The worker (`cpp/src/mcmc_fit.cpp`, `subprocess.cpp`) spawns it with
+  a kill-on-timeout, then scores with the existing closed-form C++ code using those parameters.
+- **One setting, three triggers.** `jobs.fit_mode` in {auto, fast, mcmc}: a precision dropdown on the
+  upload page (`POST /uploads?fit_mode=`), `auto` choosing MCMC for 50-2000 customers
+  (`cpp/src/fit_policy.cpp`), and `POST /jobs/{id}/refit` + a "Refit with high-precision MCMC"
+  button on a finished job. `GET /jobs/{id}` now reports `fit_mode, fit_method, fit_note,
+  source_job_id`.
+- **MCMC never fails a job.** No Python, timeout (`PARETO_MCMC_TIMEOUT_S`, default 600), non-zero
+  exit or bad output falls back to the amortized fit and sets `fit_note`. An explicit `mcmc` request
+  above 20000 customers is also downgraded with a note. Env overrides: `PARETO_PYTHON`,
+  `PARETO_MCMC_CLI`.
+- **Posterior draws are kept** (`mcmc/<job>_draws.npz`, path in `jobs.mcmc_draws_path`) for the
+  upcoming conformal CLV interval; nothing reads them yet.
+- **Measured** (live smoke, 400-customer synthetic log): MCMC refit 5.1 s; `auto` picked MCMC.
+  Suite: C++ 90 test cases / 1981 assertions, frontend 69 tests, pytest `test_mcmc_cli` 3.
+
 ### 2026-09-25 — research-paper-tracker: full review + rework, new Coverage page
 - **Full read-through of `research-paper-tracker/`** (`src/`, `tools/curate.py`,
   `tools/genealogy/`, the three config files, the GUI) produced 16 findings — correctness

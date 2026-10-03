@@ -25,6 +25,14 @@ find_package(onnxruntime CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(Arrow CONFIG REQUIRED)
 
+# This vcpkg build of Arrow 25 ships its compute kernels (sort_indices,
+# take, etc.) in a separate CMake package, ArrowCompute, rather than folding
+# them into Arrow::arrow_shared. The kernels register themselves onto the
+# global FunctionRegistry via arrow::compute::Initialize(), whose symbol
+# lives in this library, so it must be linked explicitly.
+find_package(ArrowCompute CONFIG REQUIRED)
+find_package(Drogon CONFIG REQUIRED)
+
 add_library(amortized_inference
     src/version.cpp
     src/moments.cpp
@@ -34,12 +42,29 @@ add_library(amortized_inference
     src/clv.cpp
     src/conformal.cpp
     src/ingest.cpp
+    src/db.cpp
+    src/storage.cpp
+    src/queue.cpp
+    src/forecast.cpp
+    src/fit_policy.cpp
+    src/subprocess.cpp
+    src/mcmc_fit.cpp
+    src/worker.cpp
+    src/api_routes.cpp
 )
 target_include_directories(amortized_inference PUBLIC include)
 target_link_libraries(amortized_inference PUBLIC
     onnxruntime::onnxruntime
     nlohmann_json::nlohmann_json
-    Arrow::arrow_shared
+    "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>"
+    "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,ArrowCompute::arrow_compute_static,ArrowCompute::arrow_compute_shared>"
+    Drogon::Drogon
+)
+# worker.cpp (inside this library) loads the committed ONNX/scaler artifacts, same convention
+# as the main/unit_tests executables below.
+target_compile_definitions(amortized_inference PRIVATE
+    PROJECT_MODELS_DIR="${CMAKE_SOURCE_DIR}/../models"
+    PROJECT_ROOT_DIR="${CMAKE_SOURCE_DIR}/.."
 )
 
 add_executable(main src/main.cpp)
@@ -47,6 +72,17 @@ target_link_libraries(main PRIVATE amortized_inference nlohmann_json::nlohmann_j
 target_compile_definitions(main PRIVATE
     PROJECT_MODELS_DIR="${CMAKE_SOURCE_DIR}/../models"
 )
+
+add_executable(api_server src/api_main.cpp)
+target_link_libraries(api_server PRIVATE amortized_inference Drogon::Drogon)
+# api_server applies db/schema.sql at startup (idempotent); this is the default location,
+# overridable at runtime via the PARETO_NBD_SCHEMA_PATH environment variable (api_main.cpp).
+target_compile_definitions(api_server PRIVATE
+    PARETO_NBD_DEFAULT_SCHEMA_PATH="${CMAKE_SOURCE_DIR}/../db/schema.sql"
+)
+
+add_executable(worker src/worker_main.cpp)
+target_link_libraries(worker PRIVATE amortized_inference Drogon::Drogon)
 
 enable_testing()
 add_executable(unit_tests
@@ -58,10 +94,28 @@ add_executable(unit_tests
     tests/test_clv.cpp
     tests/test_conformal.cpp
     tests/test_ingest.cpp
+    tests/test_server_fixture.cpp
+    tests/test_api_smoke.cpp
+    tests/test_db.cpp
+    tests/test_storage.cpp
+    tests/test_queue.cpp
+    tests/test_uploads_endpoint.cpp
+    tests/test_jobs_endpoint.cpp
+    tests/test_refit_endpoint.cpp
+    tests/test_results_endpoint.cpp
+    tests/test_summary_endpoint.cpp
+    tests/test_export_endpoint.cpp
+    tests/test_forecast.cpp
+    tests/test_fit_policy.cpp
+    tests/test_subprocess.cpp
+    tests/test_mcmc_fit.cpp
+    tests/test_worker.cpp
+    tests/test_integration_upload_to_results.cpp
 )
-target_link_libraries(unit_tests PRIVATE amortized_inference Catch2::Catch2WithMain)
+target_link_libraries(unit_tests PRIVATE amortized_inference Catch2::Catch2WithMain Drogon::Drogon)
 target_compile_definitions(unit_tests PRIVATE
     PROJECT_MODELS_DIR="${CMAKE_SOURCE_DIR}/../models"
+    PROJECT_ROOT_DIR="${CMAKE_SOURCE_DIR}/.."
 )
 include(CTest)
 add_test(NAME unit_tests COMMAND unit_tests)

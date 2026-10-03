@@ -5,6 +5,10 @@ __pycache__/
 *.so
 .Python
 build/
+
+# Scratch build/test logs implementers redirect output to during debugging
+cpp/build_output*.txt
+cpp/test_output*.txt
 develop-eggs/
 dist/
 downloads/
@@ -95,3 +99,13 @@ references/
 # Run logs & markers
 *.log
 *.done
+
+# Frontend
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+# The Python "lib/" rule above would otherwise ignore the SvelteKit source tree
+!frontend/src/lib/
+
+# C++ test scratch dirs
+cpp/data/

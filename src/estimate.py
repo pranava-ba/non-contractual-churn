@@ -24,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from scipy import optimize
+from scipy import integrate, optimize
 from scipy.special import gammaln, hyp2f1
 
 # ---------------------------------------------------------------------------
@@ -151,28 +151,78 @@ def fit_mcmc(df, n_draws: int = 6000, burn_in: int = 2000, thin: int = 8,
     )
 
 
+def _log_dead_ratio_quad(r, alpha, s, beta, x, t_x, T):
+    """log(term2 / term1) for ONE heavy-buyer customer via direct 1-D quadrature
+    (no hyp2f1); used only where hyp2f1 itself overflows in ``_log_dead_ratio``
+    (rare: alpha << beta and very large x). Mirrors
+    ``forecast_closed_form._log_alive_odds_quad``, which integrates the same
+    defining integral for the identical ratio (there called R)."""
+    if t_x >= T:
+        return -np.inf
+
+    def E(tau):
+        return ((r + x) * (np.log(alpha + T) - np.log(alpha + tau))
+                + s * (np.log(beta + T) - np.log(beta + tau)))
+
+    e_max = E(t_x)
+    scale = 1.0 / ((r + x) / (alpha + t_x) + s / (beta + t_x))
+    pts = [p for p in (t_x + scale, t_x + 10 * scale, t_x + 100 * scale) if p < T]
+    val, _ = integrate.quad(lambda tau: s / (beta + tau) * np.exp(E(tau) - e_max),
+                            t_x, T, points=pts or None, epsabs=0.0, epsrel=1e-11,
+                            limit=500)
+    return e_max + np.log(val) if val > 0 else -np.inf
+
+
+def _log_dead_ratio(r, alpha, s, beta, rsx, param2, maxab, absum, x, t_x, T):
+    """log(term2 / term1) of the ``_pnbd_loglik`` decomposition below, vectorised
+    over customers and computed in log space so that heavy buyers (large x) don't
+    underflow term1 and A0 to exactly 0 before the ratio is taken. Mirrors
+    ``forecast_closed_form._log_alive_odds``, which reuses this exact likelihood
+    decomposition to compute p_alive without underflow."""
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        H_tx = hyp2f1(rsx, param2, rsx + 1.0, absum / (maxab + t_x))
+        H_T = hyp2f1(rsx, param2, rsx + 1.0, absum / (maxab + T))
+        ok = np.isfinite(H_tx) & np.isfinite(H_T) & (H_tx > 0) & (H_T > 0)
+        l1 = np.log(H_tx) - rsx * np.log(maxab + t_x)
+        # l2 - l1 computed as a difference of small pieces (accurate when t_x ~ T)
+        d = (np.log(H_T) - np.log(H_tx)
+             - rsx * np.log1p((T - t_x) / (maxab + t_x)))                # <= 0
+        log_one_minus = np.where(d < 0, np.log(-np.expm1(np.minimum(d, -1e-300))),
+                                 -np.inf)                                # d >= 0 -> A0 = 0
+        log_R = (np.log(s) - np.log(rsx) + l1 + log_one_minus
+                 + (r + x) * np.log(alpha + T) + s * np.log(beta + T))
+    log_R = np.where(ok, log_R, np.nan)
+    for i in zip(*np.nonzero(~ok)):        # rare: hyp2f1 overflow -> exact quadrature
+        log_R[i] = _log_dead_ratio_quad(r, alpha, s, beta, x[i], t_x[i], T[i])
+    return log_R
+
+
 # ============================== MLE ======================================= #
 def _pnbd_loglik(params, x, t_x, T):
     """Pareto/NBD log-likelihood, log-parameterised (Fader & Hardie 2005 form).
 
     r, alpha, s, beta are scalars; x, t_x, T are per-customer vectors. The
     alpha>=beta test is therefore a single dataset-level branch, and the second
-    hypergeometric argument is s+1 (alpha>=beta) or r+x (alpha<beta)."""
+    hypergeometric argument is s+1 (alpha>=beta) or r+x (alpha<beta).
+
+    L_i = p1_i * (term1_i + term2_i); term1 = 1/((alpha+T)^(r+x) (beta+T)^s) is the
+    alive-at-T branch and term2 = (s/rsx) A0 the died-in-(t_x,T] branch. Both branches
+    and their hyp2f1-based ratio term2/term1 are computed in log space (see
+    ``_log_dead_ratio``) rather than as the direct power/A0 terms, which underflow to
+    exactly 0 for heavy buyers (large x) -- e.g. x~200+ at realistic fitted
+    parameters -- silently truncating log(term1+term2) to a floor and corrupting the
+    likelihood (and its optimisation) for any cohort containing such customers."""
     r, alpha, s, beta = np.exp(params)
     maxab = max(alpha, beta)
     absum = abs(alpha - beta)
     rsx = r + s + x
     param2 = (s + 1.0) if alpha >= beta else (r + x)
-    A0 = (hyp2f1(rsx, param2, rsx + 1.0, absum / (maxab + t_x))
-          / (maxab + t_x) ** rsx
-          - hyp2f1(rsx, param2, rsx + 1.0, absum / (maxab + T))
-          / (maxab + T) ** rsx)
+    log_term1 = -(r + x) * np.log(alpha + T) - s * np.log(beta + T)
+    log_R = _log_dead_ratio(r, alpha, s, beta, rsx, param2, maxab, absum, x, t_x, T)
+    term = log_term1 + np.logaddexp(0.0, log_R)        # log(term1 + term2)
     p1 = gammaln(r + x) - gammaln(r) + r * np.log(alpha) + s * np.log(beta)
-    inner = 1.0 / (alpha + T) ** (r + x) / (beta + T) ** s + (s / rsx) * A0
-    term = np.log(np.maximum(inner, 1e-300))
     ll = np.sum(p1 + term)
-    # guard: overflow/divergence in the power terms yields garbage (e.g. positive
-    # log-liks of +1e6). Any non-finite total is invalid -> reject.
+    # guard: any non-finite total (e.g. a degenerate parameter vector) is invalid.
     return ll if np.isfinite(ll) else -np.inf
 
 
